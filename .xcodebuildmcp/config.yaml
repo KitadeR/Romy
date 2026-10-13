@@ -1,0 +1,13 @@
+schemaVersion: 1
+
+enabledWorkflows:
+  - simulator
+  - debugging
+  - ui-automation
+
+sessionDefaults:
+  projectPath: "./Romy.xcodeproj"
+  scheme: "Romy"
+  simulatorName: "iPhone 17 Pro Max"
+  simulatorId: "587D7A86-D224-45A5-9A0D-741AF45DD4D0"
+  useLatestOS: true
