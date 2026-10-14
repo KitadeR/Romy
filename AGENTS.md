@@ -2,15 +2,15 @@
 
 ## 共通運用とプロジェクトの入口（2026-10-06）
 
-- このファイルはRomy（アプリの作業中の名前。旧BulletGO。Vault・Notionの資料名はBulletGOのまま）開発リポジトリの実装・Git・検証ルール。日常のVault運用・トリガー・外部操作の境界は共通運用側を参照し、全文をここへ複製しない。
+- このファイルはRomy（アプリ名。2026-10-14決定、旧BulletGO。ストア名はリリース前に最終確認）開発リポジトリの実装・Git・検証ルール。日常のVault運用・トリガー・外部操作の境界は共通運用側を参照し、全文をここへ複製しない。
 - MacのVaultは `/Users/kitaderuwa/obsidian`。ノートの読書き・一覧・リンク調査はObsidian MCPを使う。MCP名は実際の接続で確認する。未接続・障害・不足は報告し、フォールバックはVaultのアクセス規則に従う。
-- 作業開始時にObsidian MCPのviewで `AIOS/bootstrap.md` → `AIOS/MI.md` → `AIOS/operating-rules.md` → `AIOS/triggers.md` → 該当手順・Topic-Router・ `Projects/BulletGO/Hub.md` を原文で読む。
+- 作業開始時にObsidian MCPのviewで `AIOS/bootstrap.md` → `AIOS/MI.md` → `AIOS/operating-rules.md` → `AIOS/triggers.md` → 該当手順・Topic-Router・ `Projects/Romy/Hub.md` を原文で読む。
 - Work/Codexの共通運用入口はVaultのAGENTS.md、Claude CodeはVaultのCLAUDE.mdとtools/claude-code.md。入口が別ディレクトリにあるだけで自動読込済みとしない。
 - 旧開発入口の全文はVaultの `AIOS/archive/BulletGO_開発入口旧版_2026-10-06.md` に非適用の履歴として保存した。
 
 ## Product Context と資料の正
 
-- 現行の方向・採用範囲・未決定事項はBulletGO Hubと、 `AIOS/manuals/notion-obsidian.md` が指定する最新Notionから確認する。ここに製品仕様を固定しない。
+- 現行の方向・採用範囲・未決定事項はRomy Hubと、 `AIOS/manuals/notion-obsidian.md` が指定する最新Notionから確認する。ここに製品仕様を固定しない。
 - Projectsの現行説明・採用判断・進捗はNotion。Obsidianは原資料・経緯・ログ・現行コピーと反映履歴。現行仕様で判断する前に必要なNotionを最新取得する。不可ならコピーの取得/反映日時と未確認を示し、未決定を推測で実装しない。
 - Hubが旧版・参考・非採用として扱う資料や旧実装の完了/残作業を、新版の採用範囲や進捗として復活させない。再構築方針の採用だけでコードの削除・全面変更の実行許可があると解釈しない。
 - 毎回全資料を読む必要はない。共通入口とHubを読み、依頼に関係する採用済みの設計・資料だけを追加で読む。必要な判断を解決できなければ、その判断を確認してから変更する。
@@ -48,7 +48,7 @@
 - `.xcodebuildmcp/config.yaml` の既存設定を優先する。既存設定のProject Romy.xcodeproj、Scheme Romy、Simulator iPhone 17 Pro Maxは実環境で確認し、勝手に変更しない。
 - Build / Run / Test / Simulator / Screenshot / UI Automation / Debuggingには利用可能なXcodeツールを使う。必要に応じて通常のxcodebuildも使用できる。
 - 接続名・認証・利用可能な操作を確認し、Cursorや別フォルダのXcode登録をClaude Codeで接続済みと扱わない。
-- Apple APIやSDKが不確かな場合はApple公式ドキュメントを確認する。BestWay専用implementation-briefをRomy（BulletGO）へ一律適用しない。
+- Apple APIやSDKが不確かな場合はApple公式ドキュメントを確認する。BestWay専用implementation-briefをRomyへ一律適用しない。
 
 ## Verification
 
