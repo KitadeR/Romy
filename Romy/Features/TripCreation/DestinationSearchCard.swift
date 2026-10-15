@@ -1,7 +1,7 @@
 import MapKit
 import SwiftUI
 
-/// The open 行き先 card: search, catalog results, Apple's area results, then the chosen chips.
+/// The open 行き先 card: search, then towns, famous sights, Apple's results, and the chosen chips.
 /// Chips sit below the list so adding one does not move the rows under the finger.
 struct DestinationSearchCard: View {
     @Bindable var model: TripCreationModel
@@ -11,6 +11,7 @@ struct DestinationSearchCard: View {
     @State private var areaSearch = AreaSearch()
 
     private let catalog = DestinationCatalog.bundled
+    private let sightCatalog = SightCatalog.bundled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -33,7 +34,7 @@ struct DestinationSearchCard: View {
             .frame(height: 44)
             .background(RoundedRectangle(cornerRadius: 14).fill(Theme.fill))
 
-            let catalogResults = catalog.search(query)
+            let catalogResults = catalog.search(query, limit: 8) + sightCatalog.search(query)
             let catalogNames = Set(catalogResults.map(\.name))
             let apple = areaSearch.results.filter { !catalogNames.contains($0.title) }
 

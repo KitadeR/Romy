@@ -185,6 +185,64 @@ struct DestinationCatalogTests {
     }
 }
 
+struct SightCatalogTests {
+    private let catalog: SightCatalog = {
+        let json = """
+        [
+          {"id":"Q1","name":"鹿苑寺","aliases":["金閣寺"],"kana":["ろくおんじ"],"aliasKana":["きんかくじ"],"kind":"寺",
+           "town":"北区","prefecture":"京都府","lat":35,"lon":135,"views":900},
+          {"id":"Q2","name":"清水寺","aliases":[],"kana":["きよみずでら"],"aliasKana":[],"kind":"寺",
+           "town":"東山区","prefecture":"京都府","lat":35,"lon":135,"views":1000},
+          {"id":"Q3","name":"東京ディズニーランド","aliases":[],"kana":["とうきょうでぃずにーらんど"],"aliasKana":[],
+           "kind":"テーマパーク","town":"浦安市","prefecture":"千葉県","lat":35,"lon":139,"views":2000},
+          {"id":"Q4","name":"東京タワー","aliases":[],"kana":["とうきょうたわー"],"aliasKana":[],"kind":"タワー",
+           "town":"港区","prefecture":"東京都","lat":35,"lon":139,"views":1500}
+        ]
+        """
+        let entries = (try? JSONDecoder().decode([SightCatalog.Entry].self, from: Data(json.utf8))) ?? []
+        return SightCatalog(entries: entries)
+    }()
+
+    @Test func fixtureLoads() {
+        #expect(catalog.entries.count == 4)
+    }
+
+    /// The bundled list (built 2026-10-15). If a yearly rebuild changes the order, check it by eye.
+    @Test func bundledListFindsFamousSights() {
+        let bundled = SightCatalog.bundled
+        #expect(bundled.entries.count > 2000)
+        #expect(bundled.search("でぃずにー").first?.name == "東京ディズニーランド")
+        #expect(bundled.search("きよみずでら").first?.detail == "寺・京都市")
+        #expect(bundled.search("きんかくじ").first?.name == "金閣寺")
+        #expect(bundled.search("ちゅらうみ").first?.name == "沖縄美ら海水族館")
+        #expect(bundled.search("ひめじ").first?.name == "姫路城")
+    }
+
+    @Test func findsByReading() {
+        #expect(catalog.search("きよみず").map(\.name) == ["清水寺"])
+    }
+
+    @Test func aliasReadingShowsAlias() {
+        #expect(catalog.search("きんかくじ").map(\.name) == ["金閣寺"])
+    }
+
+    @Test func aliasIsShownWhenTyped() {
+        let found = catalog.search("金閣")
+        #expect(found.map(\.name) == ["金閣寺"])
+        #expect(found.first?.detail == "寺・北区（京都府）")
+    }
+
+    @Test func moreViewedFirst() {
+        #expect(catalog.search("とうきょう").map(\.name) == ["東京ディズニーランド", "東京タワー"])
+        #expect(catalog.search("ディズニー").map(\.name) == ["東京ディズニーランド"])
+    }
+
+    @Test func tokyoWardsKeepTheirName() {
+        #expect(SightCatalog.place(town: "港区", prefecture: "東京都") == "港区")
+        #expect(SightCatalog.place(town: "浦安市", prefecture: "千葉県") == "浦安市")
+    }
+}
+
 struct TripCreationModelTests {
     @Test func specificDatesNeedADay() {
         let model = TripCreationModel(calendar: tokyo, holidays: holidays, today: day(2026, 10, 14))

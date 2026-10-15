@@ -71,3 +71,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Cache of the sights build (Tools/sights/build_sights.py)
+Tools/sights/.cache/
