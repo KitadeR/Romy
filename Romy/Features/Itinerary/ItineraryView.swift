@@ -1,37 +1,33 @@
 import SwiftUI
 
 /// The itinerary tab (Notion 02 §6-3, §6-5, §6-6; Figma page 6 124:2 and 「16.」).
-/// The map sits behind; the itinerary is a sheet over it that can be pulled to three heights (like Rhyme).
+/// The map sits behind; the itinerary is Apple's sheet over it with three heights, and the map stays touchable
+/// at the small and middle heights (`presentationBackgroundInteraction`, like Apple Maps).
+/// The sheet covers the bottom of the screen, so the menu bar and ＋ are drawn inside it.
 /// The time column, reordering, moving plans and 済み come next (Notion 05).
-struct ItineraryView: View {
+struct ItineraryView<Bar: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
     /// The plan just added; its card is outlined for a moment (Figma 15-9).
     let highlighted: UUID?
+    /// The ＋ menu needs room above the bar, so the sheet rises to the middle height when it opens.
+    let isShowingAddMenu: Bool
     let onCreateTrip: () -> Void
     /// Opens 「行きたい所・予定を追加」 with the day it goes to (nil = 未定).
     let onAdd: (Int?) -> Void
+    @ViewBuilder let bar: () -> Bar
 
     @State private var isShowingTrips = false
     @State private var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
     @State private var isAddingDestinations = false
-    @State private var height: SheetHeight = .middle
-    @GestureState private var drag: CGFloat = 0
+    @State private var isSheetPresented = true
+    @State private var detent: PresentationDetent = Self.middle
 
-    /// The sheet's three heights, as the distance of its top from the top of the screen.
-    enum SheetHeight: CaseIterable {
-        case small, middle, large
-
-        func top(in size: CGSize) -> CGFloat {
-            switch self {
-            case .large: 8
-            case .middle: size.height * 0.3
-            case .small: max(size.height - 280, size.height * 0.3)
-            }
-        }
-    }
+    /// Small: name, caption and tabs above the menu bar. Middle: the map keeps the top 30% (Figma 124:2).
+    private static var small: PresentationDetent { .height(300) }
+    private static var middle: PresentationDetent { .fraction(0.7) }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
@@ -39,55 +35,41 @@ struct ItineraryView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let top = min(max(height.top(in: geometry.size) + drag, 8), geometry.size.height - 120)
-            ZStack(alignment: .top) {
-                let insets = geometry.safeAreaInsets
-                let fullHeight = geometry.size.height + insets.top + insets.bottom
-                ItineraryMap(
-                    trip: trip,
-                    selection: selection,
-                    visibleFraction: (insets.top + SheetHeight.middle.top(in: geometry.size)) / fullHeight,
-                    aspect: geometry.size.width / fullHeight,
-                    onAddDestination: { isAddingDestinations = true }
-                )
-                .ignoresSafeArea()
-
-                sheet(size: geometry.size)
-                    .frame(height: geometry.size.height - top + geometry.safeAreaInsets.bottom)
-                    .offset(y: top)
-            }
+            let insets = geometry.safeAreaInsets
+            let fullHeight = geometry.size.height + insets.top + insets.bottom
+            ItineraryMap(
+                trip: trip,
+                selection: selection,
+                visibleFraction: 0.3,
+                aspect: geometry.size.width / fullHeight,
+                onAddDestination: { isAddingDestinations = true }
+            )
+            .ignoresSafeArea()
         }
-        .background(Theme.base.ignoresSafeArea())
-        .sheet(isPresented: $isAddingDestinations) {
-            AddDestinationsSheet(trip: trip)
-                .presentationDetents([.large])
+        .sheet(isPresented: $isSheetPresented) {
+            sheet
+                .presentationDetents([Self.small, Self.middle, .large], selection: $detent)
+                .presentationBackgroundInteraction(.enabled(upThrough: Self.middle))
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.surface)
+                .presentationCornerRadius(28)
+                .interactiveDismissDisabled()
+        }
+        .onChange(of: isShowingAddMenu) { _, isShowing in
+            if isShowing, detent == Self.small { withAnimation(.snappy) { detent = Self.middle } }
         }
         .onChange(of: trip.dates) { _, _ in keepSelectionInRange() }
         .onAppear(perform: keepSelectionInRange)
-        .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
-            AllTripsSheet(current: trip) { createAfterTrips = true }
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $isDecidingDates) {
-            DecideDatesSheet(trip: trip)
-                .presentationDetents([.large])
-        }
     }
 
     // MARK: - Sheet
 
-    private func sheet(size: CGSize) -> some View {
+    /// Everything shown inside Apple's sheet. Sheets opened from here are attached here, because a view
+    /// behind a sheet cannot present another one.
+    private var sheet: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                Capsule()
-                    .fill(Theme.line)
-                    .frame(width: 40, height: 5)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-                header
-            }
-            .contentShape(Rectangle())
-            .gesture(dragGesture(size: size))
+            header
+                .padding(.top, 22)
             tabs
             ScrollView {
                 content
@@ -97,26 +79,20 @@ struct ItineraryView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                .fill(Theme.surface)
-                .shadow(color: .black.opacity(0.1), radius: 12, y: -2)
-                .ignoresSafeArea(edges: .bottom)
-        )
-    }
-
-    /// Pulling the top of the sheet moves it; letting go settles on the nearest height, carried by the flick.
-    private func dragGesture(size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($drag) { value, state, _ in state = value.translation.height }
-            .onEnded { value in
-                let landing = height.top(in: size) + value.predictedEndTranslation.height
-                let nearest = SheetHeight.allCases.min {
-                    abs($0.top(in: size) - landing) < abs($1.top(in: size) - landing)
-                } ?? .middle
-                withAnimation(.snappy) { height = nearest }
-            }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay { bar() }
+        .sheet(isPresented: $isAddingDestinations) {
+            AddDestinationsSheet(trip: trip)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
+            AllTripsSheet(current: trip) { createAfterTrips = true }
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $isDecidingDates) {
+            DecideDatesSheet(trip: trip)
+                .presentationDetents([.large])
+        }
     }
 
     // MARK: - Header and tabs

@@ -3,7 +3,8 @@ import SwiftUI
 
 /// One trip at a time: menu bar 「ホーム／旅程／行きたい／準備」 and a separate round ＋ (Notion 02 §6-3).
 /// The bar stays the same in Plan, Action and Memories; only the contents change.
-/// Both are Apple's Liquid Glass (decided 2026-10-15), grouped so the two pieces of glass blend.
+/// The bar itself is `ShellBar` (Liquid Glass, decided 2026-10-15). The itinerary is Apple's sheet over a map,
+/// which covers the bottom of the screen, so there the bar is drawn inside that sheet.
 struct AppShell: View {
     let trip: Trip
     let onCreateTrip: () -> Void
@@ -83,8 +84,10 @@ struct AppShell: View {
                         trip: trip,
                         selection: $itineraryTab,
                         highlighted: highlighted,
-                        onCreateTrip: onCreateTrip,
-                        onAdd: { sheet = .plan(day: $0) }
+                        isShowingAddMenu: isShowingAddMenu,
+                        onCreateTrip: createTripFromItinerary,
+                        onAdd: { sheet = .plan(day: $0) },
+                        bar: { bar }
                     )
                 case .wishlist, .preparation:
                     ComingSoonView(title: tab.title)
@@ -92,33 +95,8 @@ struct AppShell: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if isShowingAddMenu {
-                Color.black.opacity(0.18)
-                    .ignoresSafeArea()
-                    .onTapGesture { setAddMenu(false) }
-                    .transition(.opacity)
-            }
-
-            VStack(alignment: .trailing, spacing: 12) {
-                if let note {
-                    noteView(note).transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                if isShowingAddMenu {
-                    addMenu.transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
-                }
+            if tab != .itinerary {
                 bar
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 4)
-        }
-        .sheet(item: $sheet) { sheet in
-            switch sheet {
-            case .plan(let day):
-                AddPlanSheet(trip: trip, day: day, onAdded: showAdded)
-                    .presentationDetents([.large])
-            case .comingSoon(let title):
-                ComingSoonView(title: title)
-                    .presentationDetents([.medium])
             }
         }
         .task(id: note?.item.id) {
@@ -132,102 +110,28 @@ struct AppShell: View {
         }
     }
 
-    // MARK: - Bar
+    private var bar: ShellBar {
+        ShellBar(
+            tab: $tab,
+            isShowingAddMenu: $isShowingAddMenu,
+            sheet: $sheet,
+            note: $note,
+            trip: trip,
+            dayForNewPlan: dayForNewPlan,
+            onAdded: showAdded,
+            onUndo: undo
+        )
+    }
 
-    private var bar: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                menuBar
-                Button { setAddMenu(!isShowingAddMenu) } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                        .rotationEffect(.degrees(isShowingAddMenu ? 45 : 0))
-                        .frame(width: 64, height: 64)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel(isShowingAddMenu ? "閉じる" : "追加")
-            }
+    /// Trip creation is presented from the root, which cannot happen while the itinerary's sheet is up,
+    /// so the itinerary closes first.
+    private func createTripFromItinerary() {
+        tab = .home
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            onCreateTrip()
         }
     }
-
-    private var menuBar: some View {
-        HStack {
-            ForEach(Tab.allCases, id: \.self) { item in
-                Button {
-                    setAddMenu(false)
-                    tab = item
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: item.symbol(selected: tab == item))
-                            .font(.system(size: 18, weight: .semibold))
-                            .frame(height: 22)
-                        Text(item.title).font(Theme.jp(10, tab == item ? .bold : .medium))
-                    }
-                    .foregroundStyle(tab == item ? Theme.ink : Theme.secondary)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(tab == item ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 68)
-        .glassEffect(.regular.interactive(), in: .capsule)
-    }
-
-    // MARK: - ＋
-
-    /// Three large buttons float up from the ＋ (Notion 02 §6-6, Figma 15-1).
-    private var addMenu: some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            addMenuButton("宿", detail: "どこに泊まる？", symbol: "bed.double") {
-                sheet = .comingSoon("宿を追加")
-            }
-            addMenuButton("移動", detail: "新幹線・そのほか", symbol: "tram") {
-                sheet = .comingSoon("移動を追加")
-            }
-            addMenuButton("行きたい所・予定", detail: "場所を探す・名前だけでも", symbol: "smallcircle.filled.circle") {
-                sheet = .plan(day: dayForNewPlan)
-            }
-        }
-    }
-
-    private func addMenuButton(
-        _ title: String, detail: String, symbol: String, action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            setAddMenu(false)
-            action()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(Theme.surface))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.jp(16, .bold)).foregroundStyle(Theme.ink)
-                    Text(detail).font(Theme.jp(11, .medium)).foregroundStyle(Theme.secondary)
-                }
-            }
-            .padding(.leading, 10)
-            .padding(.trailing, 20)
-            .padding(.vertical, 10)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
-    }
-
-    private func setAddMenu(_ isShowing: Bool) {
-        withAnimation(.snappy) { isShowingAddMenu = isShowing }
-    }
-
-    // MARK: - After adding
 
     /// Opens the itinerary on the day the plan went to and outlines it for a moment (Figma 15-9).
     private func showAdded(_ item: ItineraryItem) {
@@ -237,22 +141,6 @@ struct AppShell: View {
         withAnimation(.snappy) {
             note = AddedNote(item: item, message: ItineraryDays.addedMessage(title: item.title, day: item.day))
         }
-    }
-
-    private func noteView(_ note: AddedNote) -> some View {
-        HStack(spacing: 12) {
-            Text(note.message)
-                .font(Theme.jp(14, .bold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            Button("元に戻す") { undo(note) }
-                .font(Theme.jp(14, .bold))
-                .foregroundStyle(Theme.undo)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Theme.ink))
     }
 
     private func undo(_ note: AddedNote) {
