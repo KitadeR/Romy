@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The itinerary tab (Notion 02 §6-3, §6-5, §6-6; Figma page 6 124:2 and 「16.」).
-/// First part: the day tabs and the plan cards, with the empty states.
-/// The map above, the time column, reordering, moving plans and 済み come next (Notion 05).
+/// The map sits behind; the itinerary is a sheet over it that can be pulled to three heights (like Rhyme).
+/// The time column, reordering, moving plans and 済み come next (Notion 05).
 struct ItineraryView: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
@@ -16,25 +16,52 @@ struct ItineraryView: View {
     @State private var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
+    @State private var isAddingDestinations = false
+    @State private var height: SheetHeight = .middle
+    @GestureState private var drag: CGFloat = 0
+
+    /// The sheet's three heights, as the distance of its top from the top of the screen.
+    enum SheetHeight: CaseIterable {
+        case small, middle, large
+
+        func top(in size: CGSize) -> CGFloat {
+            switch self {
+            case .large: 8
+            case .middle: size.height * 0.3
+            case .small: max(size.height - 280, size.height * 0.3)
+            }
+        }
+    }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            tabs
-            ScrollView {
-                content
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
-                    .padding(.bottom, 140)
+        GeometryReader { geometry in
+            let top = min(max(height.top(in: geometry.size) + drag, 8), geometry.size.height - 120)
+            ZStack(alignment: .top) {
+                let insets = geometry.safeAreaInsets
+                let fullHeight = geometry.size.height + insets.top + insets.bottom
+                ItineraryMap(
+                    trip: trip,
+                    selection: selection,
+                    visibleFraction: (insets.top + SheetHeight.middle.top(in: geometry.size)) / fullHeight,
+                    aspect: geometry.size.width / fullHeight,
+                    onAddDestination: { isAddingDestinations = true }
+                )
+                .ignoresSafeArea()
+
+                sheet(size: geometry.size)
+                    .frame(height: geometry.size.height - top + geometry.safeAreaInsets.bottom)
+                    .offset(y: top)
             }
-            .scrollIndicators(.hidden)
         }
-        .padding(.top, 16)
-        .background(Theme.surface.ignoresSafeArea())
+        .background(Theme.base.ignoresSafeArea())
+        .sheet(isPresented: $isAddingDestinations) {
+            AddDestinationsSheet(trip: trip)
+                .presentationDetents([.large])
+        }
         .onChange(of: trip.dates) { _, _ in keepSelectionInRange() }
         .onAppear(perform: keepSelectionInRange)
         .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
@@ -45,6 +72,51 @@ struct ItineraryView: View {
             DecideDatesSheet(trip: trip)
                 .presentationDetents([.large])
         }
+    }
+
+    // MARK: - Sheet
+
+    private func sheet(size: CGSize) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                Capsule()
+                    .fill(Theme.line)
+                    .frame(width: 40, height: 5)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                header
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(size: size))
+            tabs
+            ScrollView {
+                content
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .padding(.bottom, 140)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                .fill(Theme.surface)
+                .shadow(color: .black.opacity(0.1), radius: 12, y: -2)
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    /// Pulling the top of the sheet moves it; letting go settles on the nearest height, carried by the flick.
+    private func dragGesture(size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .updating($drag) { value, state, _ in state = value.translation.height }
+            .onEnded { value in
+                let landing = height.top(in: size) + value.predictedEndTranslation.height
+                let nearest = SheetHeight.allCases.min {
+                    abs($0.top(in: size) - landing) < abs($1.top(in: size) - landing)
+                } ?? .middle
+                withAnimation(.snappy) { height = nearest }
+            }
     }
 
     // MARK: - Header and tabs
@@ -171,8 +243,11 @@ struct ItineraryView: View {
     }
 
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    RouteRow(origin: items[index - 1], destination: item, isOnADay: day != nil)
+                }
                 ItineraryCard(
                     item: item, number: index + 1, color: Theme.dayColor(day), isHighlighted: item.id == highlighted
                 )

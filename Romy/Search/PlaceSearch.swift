@@ -27,7 +27,7 @@ final class PlaceSearch {
     private var region: MKCoordinateRegion?
     private var task: Task<Void, Never>?
 
-    private static let japan = MKCoordinateRegion(
+    static let japan = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.5, longitude: 137.5),
         span: MKCoordinateSpan(latitudeDelta: 22, longitudeDelta: 24)
     )
@@ -76,15 +76,20 @@ final class PlaceSearch {
     /// Finds where the trip's destinations are once, so results near them come first.
     /// Catalog destinations (prefectures, towns) have no location yet, so they are looked up by name.
     func prepare(for destinations: [Destination]) async {
+        region = Self.region(around: await Self.coordinates(of: destinations))
+    }
+
+    /// Where the destinations are. Catalog entries have no location yet, so they are looked up by name.
+    static func coordinates(of destinations: [Destination]) async -> [CLLocationCoordinate2D] {
         var points: [CLLocationCoordinate2D] = []
         for destination in destinations {
             if let latitude = destination.latitude, let longitude = destination.longitude {
                 points.append(CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
-            } else if let found = await Self.locate(destination) {
+            } else if let found = await locate(destination) {
                 points.append(found)
             }
         }
-        region = Self.region(around: points)
+        return points
     }
 
     /// A region covering the points with some room; nil when there are none (then all of Japan).

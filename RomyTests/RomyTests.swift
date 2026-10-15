@@ -475,3 +475,44 @@ struct PlaceSearchTownTests {
         #expect(PlaceSearch.town(from: "〒066-0041") == nil)
     }
 }
+
+@MainActor
+struct ItineraryPinsTests {
+    @Test func daysShownPerTab() {
+        #expect(ItineraryPins.days(for: .all, dayCount: 3) == [1, 2, 3])
+        #expect(ItineraryPins.days(for: .day(2), dayCount: 3) == [2])
+        #expect(ItineraryPins.days(for: .undecided, dayCount: 3).isEmpty)
+        #expect(ItineraryPins.days(for: .all, dayCount: 0).isEmpty)
+    }
+
+    @Test func pinsKeepTheCardNumber() {
+        let items = [
+            ItineraryItem(title: "伏見稲荷大社", day: 1, order: 0, kind: .sight, latitude: 34.967, longitude: 135.772),
+            ItineraryItem(title: "さんぽ", day: 1, order: 1, kind: .nameOnly),
+            ItineraryItem(title: "錦市場", day: 1, order: 2, kind: .food, latitude: 35.005, longitude: 135.764)
+        ]
+        let pins = ItineraryPins.pins(day: 1, items: items)
+        #expect(pins.map(\.number) == [1, 3])
+        #expect(pins.allSatisfy { $0.day == 1 })
+    }
+
+    @Test func areaAroundPins() throws {
+        #expect(ItineraryPins.rect(around: []) == nil)
+        let one = try #require(ItineraryPins.rect(around: [CLLocationCoordinate2D(latitude: 35, longitude: 135.77)]))
+        #expect(one.width > 0 && one.height > 0)
+        let kyoto = CLLocationCoordinate2D(latitude: 35.0, longitude: 135.77)
+        let osaka = CLLocationCoordinate2D(latitude: 34.69, longitude: 135.50)
+        let both = try #require(ItineraryPins.rect(around: [kyoto, osaka]))
+        #expect(both.contains(MKMapPoint(kyoto)) && both.contains(MKMapPoint(osaka)))
+    }
+
+    @Test func targetSitsInTheOpenTopPart() {
+        let target = MKMapRect(x: 1000, y: 1000, width: 100, height: 100)
+        let shown = ItineraryPins.rect(showing: target, visibleFraction: 0.4, aspect: 0.5)
+        let open = MKMapRect(x: shown.minX, y: shown.minY, width: shown.width, height: shown.height * 0.4)
+        #expect(open.contains(MKMapPoint(x: target.minX, y: target.minY)))
+        #expect(open.contains(MKMapPoint(x: target.maxX - 0.001, y: target.maxY - 0.001)))
+        #expect(abs(open.midY - target.midY) < 0.001 && abs(shown.midX - target.midX) < 0.001)
+        #expect(abs(shown.width / shown.height - 0.5) < 0.0001)
+    }
+}
