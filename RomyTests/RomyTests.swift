@@ -121,8 +121,12 @@ struct TripNamingTests {
     }
 
     @Test func duplicateGetsNumberOtherwise() {
-        let name = TripNaming.autoName(destinations: [kyoto], dates: .days(3),
-                                       existingNames: ["京都旅行", "京都旅行 2"], calendar: tokyo)
+        let name = TripNaming.autoName(
+            destinations: [kyoto],
+            dates: .days(3),
+            existingNames: ["京都旅行", "京都旅行 2"],
+            calendar: tokyo
+        )
         #expect(name == "京都旅行 3")
     }
 
@@ -270,5 +274,87 @@ struct TripCreationModelTests {
         let trip = model.makeTrip(existingNames: [])
         #expect(trip.name == "京都旅行" && trip.isNameAuto)
         #expect(trip.dates == .undecided)
+    }
+}
+
+struct NextActionPickerTests {
+    private func step(
+        _ title: String,
+        on dayNumber: Int?,
+        hour: Int? = nil,
+        order: Int = 0,
+        needsDates: Bool = false
+    ) -> TrainStep {
+        TrainStep(
+            route: "新幹線 東京→京都",
+            title: title,
+            number: 1,
+            total: 6,
+            day: dayNumber,
+            departure: hour.map { day(2026, 11, 9).addingTimeInterval(Double($0) * 3600) },
+            addedOrder: order,
+            needsTripDates: needsDates
+        )
+    }
+
+    @Test func withNothingYetItIsAddPlans() {
+        #expect(NextActionPicker.pick(dates: .undecided, trainSteps: [], undecidedPlanCount: 0) == .addPlans)
+    }
+
+    @Test func undecidedPlansNeedDays() {
+        #expect(NextActionPicker
+            .pick(dates: .days(3), trainSteps: [], undecidedPlanCount: 2) == .placeUndecided(count: 2))
+        #expect(NextActionPicker.pick(dates: .undecided, trainSteps: [], undecidedPlanCount: 2) == .addPlans)
+    }
+
+    @Test func nearerDayThenEarlierDepartureThenUndecided() {
+        let later = step("帰り", on: 3)
+        let morning = step("朝", on: 1, hour: 7)
+        let noon = step("昼", on: 1, hour: 12)
+        let floating = step("未定", on: nil, order: 0)
+        let picked = NextActionPicker.pick(
+            dates: .days(3),
+            trainSteps: [floating, later, noon, morning],
+            undecidedPlanCount: 5
+        )
+        #expect(picked == .trainStep(morning))
+    }
+
+    @Test func bookingWithoutDatesAsksForDates() {
+        let booking = step("予約する", on: 1, needsDates: true)
+        #expect(NextActionPicker
+            .pick(dates: .days(2), trainSteps: [booking], undecidedPlanCount: 0) == .decideDates(for: booking))
+        let fixed = TripDates.range(start: day(2026, 11, 9), end: day(2026, 11, 10))
+        #expect(NextActionPicker
+            .pick(dates: fixed, trainSteps: [booking], undecidedPlanCount: 0) == .trainStep(booking))
+    }
+}
+
+struct TripCountdownTests {
+    let text = DateText(calendar: tokyo, holidays: holidays)
+
+    @Test func eachDateStage() {
+        let fixed = TripCountdown(
+            dates: .range(start: day(2026, 11, 9), end: day(2026, 11, 11)),
+            today: day(2026, 10, 28),
+            text: text
+        )
+        #expect([fixed.lead, fixed.value, fixed.trail] == ["あと", "12", "日で出発"])
+        #expect(fixed.caption == "11/9〜11/11 ・ 3日間")
+        #expect(fixed.short == "あと12日")
+        #expect(!fixed.offersDateDecision)
+
+        let days = TripCountdown(dates: .days(3), today: day(2026, 10, 28), text: text)
+        #expect([days.lead, days.value, days.trail] == ["この旅は", "3", "日間"])
+        #expect(days.caption == "3日間 ・ 日付未定" && days.offersDateDecision)
+
+        let open = TripCountdown(dates: .undecided, today: day(2026, 10, 28), text: text)
+        #expect([open.lead, open.value] == ["いつ行くか", "未定"] && open.caption == "日付未定")
+    }
+
+    @Test func departureDayAndDuringTheTrip() {
+        let range = TripDates.range(start: day(2026, 11, 9), end: day(2026, 11, 11))
+        #expect(TripCountdown(dates: range, today: day(2026, 11, 9), text: text).value == "今日")
+        #expect(TripCountdown(dates: range, today: day(2026, 11, 10), text: text).value == "旅行中")
     }
 }

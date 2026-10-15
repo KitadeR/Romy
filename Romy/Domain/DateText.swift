@@ -21,6 +21,15 @@ struct DateText {
         return "\(day(start))〜\(day(end, withMonth: !sameMonth))"
     }
 
+    /// Plain range without weekdays, for the Plan Home caption: 「11/9〜11/11」 (Figma 46:147).
+    func plainRange(_ start: Date, _ end: Date) -> String {
+        func monthDay(_ date: Date) -> String {
+            let parts = calendar.dateComponents([.month, .day], from: date)
+            return "\(parts.month ?? 0)/\(parts.day ?? 0)"
+        }
+        return calendar.isDate(start, inSameDayAs: end) ? monthDay(start) : "\(monthDay(start))〜\(monthDay(end))"
+    }
+
     /// Selected range under the chips and in the collapsed row.
     func range(_ start: Date, _ end: Date) -> String {
         calendar.isDate(start, inSameDayAs: end) ? day(start) : "\(day(start))〜\(day(end))"

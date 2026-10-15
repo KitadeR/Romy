@@ -16,6 +16,8 @@ final class Trip {
     var endDate: Date?
     var createdAt: Date
     var lastOpenedAt: Date
+    /// Cover photo chosen by the person (Notion 02 §6-3). Nil until chosen; the automatic photo comes later.
+    @Attribute(.externalStorage) var photo: Data?
 
     init(name: String, isNameAuto: Bool, destinations: [Destination], dates: TripDates, now: Date = .now) {
         self.id = UUID()

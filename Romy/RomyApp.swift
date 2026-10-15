@@ -30,7 +30,8 @@ struct RootView: View {
     var body: some View {
         Group {
             if let trip = trips.first {
-                TripPlaceholderHomeView(trip: trip) { isCreating = true }
+                AppShell(trip: trip) { isCreating = true }
+                    .id(trip.id)
             } else {
                 FirstHomeView { isCreating = true }
             }

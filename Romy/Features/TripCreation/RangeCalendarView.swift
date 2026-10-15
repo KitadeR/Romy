@@ -44,7 +44,8 @@ struct RangeCalendarView: View {
                     Text(day)
                         .font(Theme.jp(11, .medium))
                         .foregroundStyle(Theme.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
                 }
             }
 
@@ -91,7 +92,8 @@ struct RangeCalendarView: View {
                 Text("\(calendar.component(.day, from: day))")
                     .font(Theme.jp(14, .bold))
                     .foregroundStyle(isEdge ? .white : (isPast ? Theme.faint : Theme.ink))
-                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
                     .background(
                         Capsule().fill(isEdge ? Theme.ink : (isInside ? Theme.rangeFill : .clear))
                     )
@@ -99,7 +101,8 @@ struct RangeCalendarView: View {
             .buttonStyle(.plain)
             .disabled(isPast)
         } else {
-            Color.clear.frame(maxWidth: .infinity, minHeight: 34)
+            Color.clear.frame(maxWidth: .infinity)
+                .frame(height: 34)
         }
     }
 }
