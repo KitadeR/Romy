@@ -9,6 +9,8 @@ struct PlanHomeView: View {
     let trip: Trip
     let onCreateTrip: () -> Void
     let onAddPlans: () -> Void
+    /// 「日に入れる」: opens the itinerary's 未定 tab.
+    let onOpenUndecided: () -> Void
 
     @Environment(\.modelContext) private var modelContext
     @State private var photoItem: PhotosPickerItem?
@@ -26,9 +28,9 @@ struct PlanHomeView: View {
     /// White text on a photo, ink text on the plain grey.
     private var onPhoto: Color { photo == nil ? Theme.ink : .white }
 
-    /// The itinerary does not exist yet, so there are no Shinkansen steps or 未定 plans to offer.
+    /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
     private var nextAction: NextAction {
-        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: 0)
+        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count)
     }
 
     var body: some View {
@@ -188,7 +190,8 @@ struct PlanHomeView: View {
             NextActionCard(action: nextAction) {
                 switch nextAction {
                 case .decideDates: isDecidingDates = true
-                case .addPlans, .placeUndecided, .trainStep: onAddPlans()
+                case .placeUndecided: onOpenUndecided()
+                case .addPlans, .trainStep: onAddPlans()
                 }
             }
             .offset(y: -20)

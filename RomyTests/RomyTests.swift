@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import MapKit
+import SwiftData
 import Testing
 @testable import Romy
 
@@ -356,5 +358,120 @@ struct TripCountdownTests {
         let range = TripDates.range(start: day(2026, 11, 9), end: day(2026, 11, 11))
         #expect(TripCountdown(dates: range, today: day(2026, 11, 9), text: text).value == "今日")
         #expect(TripCountdown(dates: range, today: day(2026, 11, 10), text: text).value == "旅行中")
+    }
+}
+
+struct ItineraryDaysTests {
+    let text = DateText(calendar: tokyo, holidays: holidays)
+
+    @Test func daysAndTabLabels() {
+        let fixed = ItineraryDays(dates: .range(start: day(2026, 11, 9), end: day(2026, 11, 11)), text: text)
+        #expect(fixed.days.map(\.number) == [1, 2, 3])
+        #expect(fixed.days.map { fixed.tabLabel($0) } == ["11/9 1日目", "11/10 2日目", "11/11 3日目"])
+
+        let counted = ItineraryDays(dates: .days(2), text: text)
+        #expect(counted.days.map { counted.tabLabel($0) } == ["1日目", "2日目"])
+        #expect(ItineraryDays(dates: .undecided, text: text).days.isEmpty)
+    }
+
+    @Test func captionsFollowFigma16() {
+        let fixed = ItineraryDays(dates: .range(start: day(2026, 11, 9), end: day(2026, 11, 11)), text: text)
+        #expect(fixed.caption(for: .all, hasDestination: true) == "11/9（月）〜11/11（水） ・ 3日間")
+        #expect(fixed.caption(for: .day(1), hasDestination: true) == "1日目 ・ 11/9（月）")
+        #expect(fixed.caption(for: .undecided, hasDestination: true) == "日がまだ決まっていない予定")
+
+        let counted = ItineraryDays(dates: .days(3), text: text)
+        #expect(counted.caption(for: .all, hasDestination: true) == "3日間 ・ 日付未定")
+        #expect(counted.caption(for: .day(2), hasDestination: true) == "2日目")
+
+        let open = ItineraryDays(dates: .undecided, text: text)
+        #expect(open.caption(for: .all, hasDestination: true) == "いつ行くか 未定")
+        #expect(open.caption(for: .undecided, hasDestination: false) == "行き先 未定 ・ いつ行くか 未定")
+    }
+
+    @Test func placementAndNewPlanDay() {
+        #expect(ItineraryDays.placement(of: 2, dayCount: 3) == 2)
+        #expect(ItineraryDays.placement(of: 4, dayCount: 3) == nil)
+        #expect(ItineraryDays.placement(of: nil, dayCount: 3) == nil)
+        #expect(ItineraryTab.day(2).dayForNewPlan == 2)
+        #expect(ItineraryTab.all.dayForNewPlan == nil && ItineraryTab.undecided.dayForNewPlan == nil)
+        #expect(ItineraryDays.addedMessage(title: "伏見稲荷大社", day: 1) == "伏見稲荷大社を1日目に追加しました")
+        #expect(ItineraryDays.addedMessage(title: "清水寺", day: nil) == "清水寺を未定に追加しました")
+    }
+}
+
+struct PlaceSearchTests {
+    @Test func wardFromPlacemark() {
+        #expect(PlaceSearch.ward(locality: "京都市", subLocality: "東山区") == "京都市東山区")
+        #expect(PlaceSearch.ward(locality: "港区", subLocality: "六本木") == "港区")
+        #expect(PlaceSearch.ward(locality: "箱根町", subLocality: "湯本") == "箱根町")
+        #expect(PlaceSearch.ward(locality: nil, subLocality: "東山区") == nil)
+    }
+
+    @Test func regionAroundDestinations() {
+        #expect(PlaceSearch.region(around: []) == nil)
+        let kyoto = CLLocationCoordinate2D(latitude: 35.0, longitude: 135.77)
+        let osaka = CLLocationCoordinate2D(latitude: 34.69, longitude: 135.50)
+        let region = try! #require(PlaceSearch.region(around: [kyoto, osaka]))
+        #expect(abs(region.center.latitude - 34.845) < 0.001)
+        #expect(region.span.latitudeDelta >= 0.4)
+    }
+}
+
+@MainActor
+struct TripItemsTests {
+    private func makeTrip(_ dates: TripDates) throws -> (ModelContext, Trip) {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "京都旅行", isNameAuto: true, destinations: [], dates: dates)
+        context.insert(trip)
+        return (context, trip)
+    }
+
+    private func add(_ title: String, day: Int?, to trip: Trip, in context: ModelContext) {
+        let item = ItineraryItem(title: title, day: day, order: trip.nextOrder(on: day), kind: .nameOnly)
+        context.insert(item)
+        item.trip = trip
+    }
+
+    @Test func itemsKeepTheirOrderPerDay() throws {
+        let (context, trip) = try makeTrip(.days(2))
+        add("伏見稲荷大社", day: 1, to: trip, in: context)
+        add("錦市場", day: 1, to: trip, in: context)
+        add("嵐山", day: 2, to: trip, in: context)
+        add("抹茶のお店", day: nil, to: trip, in: context)
+        #expect(trip.items(on: 1).map(\.title) == ["伏見稲荷大社", "錦市場"])
+        #expect(trip.items(on: 2).map(\.title) == ["嵐山"])
+        #expect(trip.items(on: nil).map(\.title) == ["抹茶のお店"])
+    }
+
+    @Test func plansStayOnTheirDayWhenDatesAreDecided() throws {
+        let (context, trip) = try makeTrip(.days(3))
+        add("清水寺", day: 2, to: trip, in: context)
+        trip.dates = .range(start: .now, end: Calendar.current.date(byAdding: .day, value: 2, to: .now)!)
+        trip.moveItemsPastLastDay()
+        #expect(trip.items(on: 2).map(\.title) == ["清水寺"])
+    }
+
+    @Test func plansPastTheLastDayMoveToUndecided() throws {
+        let (context, trip) = try makeTrip(.days(3))
+        add("抹茶のお店", day: nil, to: trip, in: context)
+        add("嵐山", day: 3, to: trip, in: context)
+        trip.dates = .range(start: .now, end: Calendar.current.date(byAdding: .day, value: 1, to: .now)!)
+        trip.moveItemsPastLastDay()
+        #expect(trip.items(on: nil).map(\.title) == ["抹茶のお店", "嵐山"])
+        #expect(trip.items.first { $0.title == "嵐山" }?.day == nil)
+    }
+}
+
+struct PlaceSearchTownTests {
+    @Test func townOnlyWhenItIsATown() {
+        #expect(PlaceSearch.town(from: "〒089-0100, 北海道上川郡清水町") == "清水町")
+        #expect(PlaceSearch.town(from: "京都府京都市東山区清水1丁目294") == "京都市")
+        #expect(PlaceSearch.town(from: "きよみず公園") == nil)
+        #expect(PlaceSearch.town(from: "〒066-0041") == nil)
     }
 }

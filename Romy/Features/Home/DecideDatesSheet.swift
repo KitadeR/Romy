@@ -70,6 +70,7 @@ struct DecideDatesSheet: View {
     private func decide() {
         guard let start else { return }
         trip.dates = .range(start: start, end: end ?? start)
+        trip.moveItemsPastLastDay()
         dismiss()
     }
 }

@@ -11,6 +11,21 @@ enum Theme {
     static let line = Color(hex: 0xDCDCDC)
     static let secondary = Color(hex: 0x8A8A8A)
     static let faint = Color(hex: 0xC8C8C8)
+    /// 「元に戻す」 on the dark note.
+    static let undo = Color(hex: 0xFE9000)
+
+    /// One color per day, the same on tabs, cards and (later) map pins (Notion 02 §6-3, §6-5).
+    /// The first three are agreed; the rest are added so longer trips still get a color.
+    private static let dayColors: [Color] = [
+        Color(hex: 0x0097FF), Color(hex: 0xFF4200), Color(hex: 0xFE9000),
+        Color(hex: 0x00B37E), Color(hex: 0x8E5CF6), Color(hex: 0xE5338B), Color(hex: 0x00A3A3)
+    ]
+
+    /// Color of a day; 未定 (nil) is grey.
+    static func dayColor(_ day: Int?) -> Color {
+        guard let day, day >= 1 else { return secondary }
+        return dayColors[(day - 1) % dayColors.count]
+    }
 
     /// Japanese text.
     static func jp(_ size: CGFloat, _ weight: JPWeight = .regular) -> Font {
