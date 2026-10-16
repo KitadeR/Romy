@@ -22,6 +22,13 @@ struct ItineraryView<Bar: View>: View {
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
     @State private var isAddingDestinations = false
+    @State private var editingTime: EditingTime?
+
+    private struct EditingTime: Identifiable {
+        let item: ItineraryItem
+        let slot: DaySchedule.Slot
+        var id: UUID { item.id }
+    }
     @State private var isSheetPresented = true
     @State private var detent: PresentationDetent = Self.middle
 
@@ -88,6 +95,13 @@ struct ItineraryView<Bar: View>: View {
         .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
             AllTripsSheet(current: trip) { createAfterTrips = true }
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $editingTime) { editing in
+            TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
+                editing.item.durationMinutes = duration
+                editing.item.fixedStartMinutes = fixed
+            }
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $isDecidingDates) {
             DecideDatesSheet(trip: trip)
@@ -219,13 +233,25 @@ struct ItineraryView<Bar: View>: View {
     }
 
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
-        VStack(spacing: 6) {
+        // 未定 has no order of visits, so no times; a day shows them (Notion 02 §6-5).
+        let schedule = day == nil ? nil : DaySchedule(
+            dayStartMinutes: trip.dayStartMinutes,
+            plans: items.map {
+                DaySchedule.Input(
+                    id: $0.id, durationMinutes: $0.durationMinutes, fixedStartMinutes: $0.fixedStartMinutes
+                )
+            }
+        )
+        return VStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     RouteRow(origin: items[index - 1], destination: item, isOnADay: day != nil)
                 }
-                ItineraryCard(
-                    item: item, number: index + 1, color: Theme.dayColor(day), isHighlighted: item.id == highlighted
+                let slot = schedule?.slot(for: item.id)
+                ItineraryRow(
+                    item: item, number: index + 1, color: Theme.dayColor(day),
+                    isHighlighted: item.id == highlighted, slot: slot,
+                    onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } }
                 )
             }
         }

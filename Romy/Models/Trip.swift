@@ -18,6 +18,8 @@ final class Trip {
     var lastOpenedAt: Date
     /// Cover photo chosen by the person (Notion 02 §6-3). Nil until chosen; the automatic photo comes later.
     @Attribute(.externalStorage) var photo: Data?
+    /// When each day starts, in minutes after midnight (「1日の始まり」). Guessed times count from here.
+    var dayStartMinutes: Int = 9 * 60
     /// Plans on the days and in 未定 (Notion 02 §5).
     @Relationship(deleteRule: .cascade, inverse: \ItineraryItem.trip) var items: [ItineraryItem] = []
 

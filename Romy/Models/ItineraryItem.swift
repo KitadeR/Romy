@@ -22,6 +22,10 @@ final class ItineraryItem {
     /// Apple's place identifier, kept for the place card later (iOS 18+).
     var placeID: String?
     var createdAt: Date
+    /// How long the plan takes, in minutes (Notion 02 §6-5 時刻のシート 「長さ」).
+    var durationMinutes: Int = 60
+    /// Start fixed by the person (鍵), in minutes after midnight; nil while the start is a guess (目安).
+    var fixedStartMinutes: Int?
     var trip: Trip?
 
     init(

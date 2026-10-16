@@ -516,3 +516,29 @@ struct ItineraryPinsTests {
         #expect(abs(shown.width / shown.height - 0.5) < 0.0001)
     }
 }
+
+struct DayScheduleTests {
+    private func plan(_ duration: Int, fixed: Int? = nil) -> DaySchedule.Input {
+        DaySchedule.Input(id: UUID(), durationMinutes: duration, fixedStartMinutes: fixed)
+    }
+
+    @Test func guessedTimesFollowOneAnother() {
+        let plans = [plan(60), plan(90), plan(30)]
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: plans)
+        #expect(schedule.slots.map(\.startMinutes) == [540, 600, 690])
+        #expect(schedule.slots.map(\.endMinutes) == [600, 690, 720])
+        #expect(schedule.slots.allSatisfy { !$0.isFixed })
+    }
+
+    @Test func fixedStartHoldsAndLaterPlansFollowIt() {
+        let plans = [plan(60), plan(60, fixed: 12 * 60 + 30), plan(60)]
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: plans)
+        #expect(schedule.slots.map(\.startMinutes) == [540, 750, 810])
+        #expect(schedule.slots.map(\.isFixed) == [false, true, false])
+    }
+
+    @Test func clockPastMidnightKeepsCounting() {
+        #expect(DaySchedule.clock(540) == "9:00")
+        #expect(DaySchedule.clock(25 * 60 + 5) == "25:05")
+    }
+}
