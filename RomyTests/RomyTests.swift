@@ -456,6 +456,37 @@ struct TripItemsTests {
         #expect(trip.items(on: 2).map(\.title) == ["清水寺"])
     }
 
+    @Test func movingGoesToTheEndOfTheOtherDay() throws {
+        let (context, trip) = try makeTrip(.days(2))
+        add("A", day: 1, to: trip, in: context)
+        add("B", day: 1, to: trip, in: context)
+        add("C", day: 2, to: trip, in: context)
+        let a = try #require(trip.items.first { $0.title == "A" })
+        trip.move(a, toDay: 2)
+        #expect(trip.items(on: 1).map(\.title) == ["B"])
+        #expect(trip.items(on: 2).map(\.title) == ["C", "A"])
+        trip.move(a, toDay: nil)
+        #expect(trip.items(on: nil).map(\.title) == ["A"])
+        #expect(trip.items(on: 2).map(\.title) == ["C"])
+    }
+
+    @Test func droppingOnAPlanTakesItsPlace() throws {
+        let (context, trip) = try makeTrip(.days(2))
+        for title in ["A", "B", "C"] { add(title, day: 1, to: trip, in: context) }
+        add("D", day: 2, to: trip, in: context)
+        let (a, c, d) = (
+            try #require(trip.items.first { $0.title == "A" }),
+            try #require(trip.items.first { $0.title == "C" }),
+            try #require(trip.items.first { $0.title == "D" })
+        )
+        trip.reorder(a, onto: c)
+        #expect(trip.items(on: 1).map(\.title) == ["B", "C", "A"])
+        trip.reorder(d, onto: trip.items(on: 1)[0])
+        #expect(trip.items(on: 1).first?.title == "D")
+        #expect(trip.items(on: 2).isEmpty)
+        #expect(trip.items(on: 1).map(\.order) == [0, 1, 2, 3])
+    }
+
     @Test func plansPastTheLastDayMoveToUndecided() throws {
         let (context, trip) = try makeTrip(.days(3))
         add("抹茶のお店", day: nil, to: trip, in: context)

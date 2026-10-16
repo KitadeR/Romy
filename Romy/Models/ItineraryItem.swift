@@ -118,3 +118,34 @@ extension Trip {
         }
     }
 }
+
+extension Trip {
+    /// Moves a plan to the end of another day, or of 未定 when `day` is nil (Notion 02 §6-3 「予定を動かす」).
+    func move(_ item: ItineraryItem, toDay day: Int?) {
+        let from = items(on: ItineraryDays.placement(of: item.day, dayCount: ItineraryDays.count(of: dates)))
+        guard !(item.day == day && from.contains { $0.id == item.id }) else { return }
+        item.day = day
+        item.order = nextOrder(on: day)
+        renumber(day: day)
+    }
+
+    /// Drops a plan onto another plan: it takes that plan's place, in that plan's day (the plans between shift by one).
+    func reorder(_ item: ItineraryItem, onto target: ItineraryItem) {
+        guard item.id != target.id else { return }
+        let dayCount = ItineraryDays.count(of: dates)
+        let targetDay = ItineraryDays.placement(of: target.day, dayCount: dayCount)
+        var list = items(on: targetDay)
+        guard let targetIndex = list.firstIndex(where: { $0.id == target.id }) else { return }
+        let oldDay = ItineraryDays.placement(of: item.day, dayCount: dayCount)
+        list.removeAll { $0.id == item.id }
+        list.insert(item, at: min(targetIndex, list.count))
+        item.day = targetDay
+        for (index, plan) in list.enumerated() { plan.order = index }
+        if oldDay != targetDay { renumber(day: oldDay) }
+    }
+
+    /// Closes gaps in the order of a day (or of 未定).
+    func renumber(day: Int?) {
+        for (index, plan) in items(on: day).enumerated() { plan.order = index }
+    }
+}

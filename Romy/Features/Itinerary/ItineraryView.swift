@@ -23,6 +23,7 @@ struct ItineraryView<Bar: View>: View {
     @State private var createAfterTrips = false
     @State private var isAddingDestinations = false
     @State private var editingTime: EditingTime?
+    @State private var moving: ItineraryItem?
 
     private struct EditingTime: Identifiable {
         let item: ItineraryItem
@@ -95,6 +96,10 @@ struct ItineraryView<Bar: View>: View {
         .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
             AllTripsSheet(current: trip) { createAfterTrips = true }
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $moving) { item in
+            MoveSheet(trip: trip, item: item)
+                .presentationDetents([.large])
         }
         .sheet(item: $editingTime) { editing in
             TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
@@ -174,6 +179,9 @@ struct ItineraryView<Bar: View>: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+}
+
+extension ItineraryView {
     // MARK: - Content
 
     @ViewBuilder
@@ -253,6 +261,16 @@ struct ItineraryView<Bar: View>: View {
                     isHighlighted: item.id == highlighted, slot: slot,
                     onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } }
                 )
+                .onTapGesture { moving = item }
+                // Long press lifts the card; dropping it on another plan puts it in that plan's place.
+                .draggable(item.id.uuidString)
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let id = ids.first, let dragged = trip.items.first(where: { $0.id.uuidString == id }) else {
+                        return false
+                    }
+                    withAnimation(.snappy) { trip.reorder(dragged, onto: item) }
+                    return true
+                }
             }
         }
     }
