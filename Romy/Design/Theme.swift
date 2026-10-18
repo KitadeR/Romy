@@ -11,6 +11,8 @@ enum Theme {
     static let line = Color(hex: 0xDCDCDC)
     static let secondary = Color(hex: 0x8A8A8A)
     static let faint = Color(hex: 0xC8C8C8)
+    /// The blue of the buttons that guide (Rhyme's 案内ボタン, about #2FA8F5): the route button of a move.
+    static let guide = Color(hex: 0x2FA8F5)
     /// 「元に戻す」 on the dark note.
     static let undo = Color(hex: 0xFE9000)
 

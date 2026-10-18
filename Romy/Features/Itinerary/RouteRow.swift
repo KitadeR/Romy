@@ -19,6 +19,8 @@ struct RouteRow: View {
     var highlight: Color?
 
     @State private var isChoosing = false
+    /// The tile tapped, while the lens slides to it and before the tiles close.
+    @State private var pendingMode: TravelMode?
 
     var body: some View {
         Group {
@@ -39,18 +41,25 @@ struct RouteRow: View {
         .background { if isOnADay, let line { TimeLine(style: line) } }
     }
 
-    /// 「電車 13分 ・ 10.3km」 with the arrows of a menu.
+    /// 「電車 13分 ・ 10.3km」 with the arrows of a menu. While Apple has not answered, grey bars stand for the
+    /// time and the distance.
     private func chip(_ move: TravelMove) -> some View {
         let estimate = travel.estimate(for: move)
+        let isLoading = travel.isLoading(move)
         let text = estimate.map { "\(move.mode.label) \($0.durationText) ・ \($0.distanceText)" } ?? move.mode.label
         return Button { isChoosing = true } label: {
             HStack(spacing: 6) {
                 Image(systemName: move.mode.symbol)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(move.mode.tint)
-                Text(text)
-                    .font(Theme.jp(12, .bold))
-                    .foregroundStyle(Theme.ink)
+                if isLoading {
+                    SkeletonBar(width: 30)
+                    SkeletonBar(width: 38)
+                } else {
+                    Text(text)
+                        .font(Theme.jp(12, .bold))
+                        .foregroundStyle(Theme.ink)
+                }
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Theme.secondary)
@@ -60,44 +69,28 @@ struct RouteRow: View {
             .background(Capsule().fill(Theme.fill))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("移動の手段、\(text)")
+        .accessibilityLabel(isLoading ? "移動の手段、\(move.mode.label)、時間を調べています" : "移動の手段、\(text)")
         .popover(isPresented: $isChoosing) {
             tiles(move)
                 .presentationCompactAdaptation(.popover)
         }
     }
 
-    /// Walking, car and train side by side, each with its time and distance; the chosen one is shaded.
+    private static let tileTrack = LensTrack(count: TravelMode.allCases.count, itemWidth: 78, spacing: 8)
+    private static let tileHeight: CGFloat = 100
+
+    /// Walking, car and train side by side, each with its time and distance; a glass lens marks the chosen one and
+    /// slides to the one tapped before the tiles close. Grey bars stand for what Apple has not answered yet.
     private func tiles(_ move: TravelMove) -> some View {
-        HStack(spacing: 8) {
-            ForEach(TravelMode.allCases, id: \.self) { mode in
-                let estimate = travel.estimate(for: move.with(mode: mode))
-                Button {
-                    destination.travelMode = mode
-                    isChoosing = false
-                } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: mode.symbol)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(mode.tint)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(mode.tint.opacity(0.14)))
-                        Text(estimate?.durationText ?? mode.label)
-                            .font(Theme.jp(14, .bold))
-                            .foregroundStyle(Theme.ink)
-                        Text(estimate?.distanceText ?? " ")
-                            .font(Theme.jp(11, .medium))
-                            .foregroundStyle(Theme.secondary)
-                    }
-                    .frame(width: 78)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(mode == move.mode ? Theme.fill : .clear))
+        let chosen = TravelMode.allCases.firstIndex(of: pendingMode ?? move.mode) ?? 0
+        return ZStack(alignment: .leading) {
+            GlassLens(cornerRadius: 14)
+                .frame(width: Self.tileTrack.itemWidth, height: Self.tileHeight)
+                .offset(x: Self.tileTrack.offset(of: chosen))
+            HStack(spacing: Self.tileTrack.spacing) {
+                ForEach(TravelMode.allCases, id: \.self) { mode in
+                    tile(mode, move: move)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    "\(mode.label)\(estimate.map { "、\($0.durationText)、\($0.distanceText)" } ?? "")"
-                )
-                .accessibilityAddTraits(mode == move.mode ? .isSelected : [])
             }
         }
         .padding(10)
@@ -105,14 +98,64 @@ struct RouteRow: View {
         .task { await travel.load(TravelMode.allCases.map { move.with(mode: $0) }) }
     }
 
-    /// The round button: the route in Apple Maps by the chosen mode. It takes the day's color on the move from 今.
+    private func tile(_ mode: TravelMode, move: TravelMove) -> some View {
+        let other = move.with(mode: mode)
+        let estimate = travel.estimate(for: other)
+        let isLoading = travel.isLoading(other)
+        return Button { choose(mode) } label: {
+            VStack(spacing: 6) {
+                Image(systemName: mode.symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(mode.tint)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(mode.tint.opacity(0.14)))
+                if isLoading {
+                    SkeletonBar(width: 38, height: 12)
+                    SkeletonBar(width: 28, height: 9)
+                } else {
+                    Text(estimate?.durationText ?? mode.label)
+                        .font(Theme.jp(14, .bold))
+                        .foregroundStyle(Theme.ink)
+                    Text(estimate?.distanceText ?? " ")
+                        .font(Theme.jp(11, .medium))
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            .frame(width: Self.tileTrack.itemWidth, height: Self.tileHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(mode.label)\(estimate.map { "、\($0.durationText)、\($0.distanceText)" } ?? "")"
+        )
+        .accessibilityAddTraits(mode == (pendingMode ?? currentMode) ? .isSelected : [])
+    }
+
+    /// The way of going now: the person's choice, or the first guess.
+    private var currentMode: TravelMode? {
+        TravelTimes.move(from: origin, to: destination)?.mode
+    }
+
+    /// The lens slides to the tile first; the choice is kept and the tiles close right after.
+    private func choose(_ mode: TravelMode) {
+        withAnimation(.bouncy(duration: 0.3)) { pendingMode = mode }
+        Task {
+            try? await Task.sleep(for: .milliseconds(280))
+            destination.travelMode = mode
+            isChoosing = false
+            pendingMode = nil
+        }
+    }
+
+    /// The route button: Liquid Glass tinted with the guide blue (Rhyme's 案内ボタン); on the move from 今 it takes the
+    /// day's color. It opens the route in Apple Maps by the chosen mode.
     private func directionButton(_ move: TravelMove, start: MKMapItem, end: MKMapItem) -> some View {
         Button { RouteLink.open(from: start, to: end, mode: move.mode) } label: {
             Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(highlight == nil ? Theme.ink : .white)
+                .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
-                .background(Circle().fill(highlight ?? Theme.fill))
+                .glassEffect(.regular.tint(highlight ?? Theme.guide).interactive(), in: .circle)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(origin.title)から\(destination.title)への経路（\(move.mode.label)）")

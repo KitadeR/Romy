@@ -55,6 +55,19 @@ final class TravelTimes {
         )
     }
 
+    /// True until Apple has answered (asked, or about to be asked); false once there is an answer or none.
+    func isLoading(_ move: TravelMove?) -> Bool {
+        guard let move else { return false }
+        switch results[move] {
+        case nil, .loading: return true
+        case .ready, .unavailable: return false
+        }
+    }
+
+    func store(_ result: Result?, for move: TravelMove) {
+        results[move] = result
+    }
+
     func estimate(for move: TravelMove?) -> TravelEstimate? {
         guard let move, case .ready(let estimate) = results[move] else { return nil }
         return estimate
@@ -68,10 +81,10 @@ final class TravelTimes {
     /// Asks Apple for the moves not asked yet, one after another.
     func load(_ moves: [TravelMove]) async {
         for move in moves where results[move] == nil {
-            results[move] = .loading
+            store(.loading, for: move)
             let answer = await Self.fetch(move)
             // A cancelled task (the list went away) did not get a real answer; ask again next time.
-            results[move] = Task.isCancelled ? nil : answer
+            store(Task.isCancelled ? nil : answer, for: move)
         }
     }
 

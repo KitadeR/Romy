@@ -1085,3 +1085,85 @@ struct TravelTimeTests {
         #expect(ItineraryItem.restored(from: item.snapshot()).travelMode == nil)
     }
 }
+
+struct GlassLensTests {
+    private let bar = LensTrack(count: 4, itemWidth: 80)
+
+    @Test func theLensSitsOnTheChosenTab() {
+        #expect(bar.offset(of: 0) == 0)
+        #expect(bar.offset(of: 2) == 160)
+    }
+
+    @Test func aFingerPicksTheTabUnderIt() {
+        #expect(bar.index(at: 0) == 0)
+        #expect(bar.index(at: 79.9) == 0)
+        #expect(bar.index(at: 80) == 1)
+        #expect(bar.index(at: 250) == 3)
+    }
+
+    @Test func thePlacesBeyondTheEndsHoldTheEndTabs() {
+        #expect(bar.index(at: -30) == 0)
+        #expect(bar.index(at: 5000) == 3)
+    }
+
+    @Test func theLensFollowsTheFingerWithoutLeavingTheBar() {
+        #expect(bar.followingOffset(at: 100) == 60)
+        #expect(bar.followingOffset(at: 10) == 0)
+        #expect(bar.followingOffset(at: 400) == 240)
+    }
+
+    @Test func tilesWithGapsAreMeasuredByTheirPitch() {
+        let tiles = LensTrack(count: 3, itemWidth: 78, spacing: 8)
+        #expect(tiles.offset(of: 1) == 86)
+        #expect(tiles.index(at: 90) == 1)
+        #expect(tiles.index(at: 85.9) == 0)
+        #expect(tiles.followingOffset(at: 1000) == 172)
+    }
+
+    @Test func anEmptyTrackAlwaysAnswersTheFirstChoice() {
+        #expect(LensTrack(count: 0, itemWidth: 80).index(at: 40) == 0)
+    }
+}
+
+struct TravelLoadingTests {
+    private func move() -> TravelMove {
+        let tokyo = ItineraryItem(
+            title: "東京駅", day: 1, order: 0, kind: .sight, latitude: 35.6812, longitude: 139.7671
+        )
+        let tower = ItineraryItem(
+            title: "東京タワー", day: 1, order: 1, kind: .sight, latitude: 35.6586, longitude: 139.7454
+        )
+        return TravelTimes.move(from: tokyo, to: tower)!
+    }
+
+    @Test func aMoveNotAnsweredYetIsLoading() {
+        let travel = TravelTimes()
+        let asked = move()
+        #expect(travel.isLoading(asked))
+        travel.store(.loading, for: asked)
+        #expect(travel.isLoading(asked))
+    }
+
+    @Test func anAnswerOrNoAnswerEndsTheLoading() {
+        let travel = TravelTimes()
+        let asked = move()
+        travel.store(.ready(TravelEstimate(minutes: 5, meters: 400)), for: asked)
+        #expect(!travel.isLoading(asked))
+        #expect(travel.estimate(for: asked) == TravelEstimate(minutes: 5, meters: 400))
+        travel.store(.unavailable, for: asked)
+        #expect(!travel.isLoading(asked))
+        #expect(travel.estimate(for: asked) == nil)
+    }
+
+    @Test func aCancelledAskIsForgottenSoItIsAskedAgain() {
+        let travel = TravelTimes()
+        let asked = move()
+        travel.store(.loading, for: asked)
+        travel.store(nil, for: asked)
+        #expect(travel.isLoading(asked))
+    }
+
+    @Test func noMoveIsNeverLoading() {
+        #expect(!TravelTimes().isLoading(nil))
+    }
+}
