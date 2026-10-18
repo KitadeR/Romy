@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 「どの日に入れる？」 (Notion 02 §6-3 予定を動かす, Figma 17-5): the days with how many plans each has, 未定,
-/// and one black button. For now a tap on a plan opens this; the plan's detail sheet will hold it later (Notion 05).
+/// and one black button. Opened from a plan's detail (「日を移す」).
 struct MoveSheet: View {
     let trip: Trip
     let item: ItineraryItem

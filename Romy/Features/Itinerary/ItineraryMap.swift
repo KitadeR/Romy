@@ -87,6 +87,10 @@ struct ItineraryMap: View {
     /// so the pins are framed in the part that shows.
     let visibleFraction: Double
     let aspect: Double
+    /// The plan whose detail is open: its pin shows the name and the map moves to it.
+    let selectedID: UUID?
+    /// A pin was tapped (Notion 02 §6-5: the plan's detail opens).
+    let onSelect: (UUID) -> Void
     let onAddDestination: () -> Void
 
     @State private var position: MapCameraPosition = .rect(ItineraryPins.rect(of: PlaceSearch.japan))
@@ -118,7 +122,10 @@ struct ItineraryMap: View {
             }
             ForEach(pins) { pin in
                 Annotation("", coordinate: pin.coordinate, anchor: .center) {
-                    Button { focus(on: pin) } label: { pinLabel(pin) }
+                    Button {
+                        onSelect(pin.id)
+                        focus(on: pin)
+                    } label: { pinLabel(pin) }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(pin.day)日目の\(pin.number)番目")
                 }
@@ -128,7 +135,7 @@ struct ItineraryMap: View {
         .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControlVisibility(.hidden)
         .overlay(alignment: .top) {
-            if trip.destinations.isEmpty {
+            if trip.destinations.isEmpty, selectedID == nil {
                 // In the middle of the open map when it is empty (Figma 16-6); near the top once
                 // there are pins, so it never sits on top of one.
                 GeometryReader { geometry in
@@ -144,6 +151,9 @@ struct ItineraryMap: View {
             destinationPoints = await PlaceSearch.coordinates(of: trip.destinations)
         }
         .onChange(of: frameKey, initial: true) { _, _ in frame() }
+        .onChange(of: selectedID) { _, id in
+            if let pin = pins.first(where: { $0.id == id }) { focus(on: pin) }
+        }
     }
 
     private func pinLabel(_ pin: MapPin) -> some View {
@@ -154,6 +164,21 @@ struct ItineraryMap: View {
             .background(Circle().fill(Theme.dayColor(pin.day)))
             .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+            .overlay(alignment: .top) {
+                // The open plan's name above its pin; the pin itself stays where it is.
+                if pin.id == selectedID, let title = trip.items.first(where: { $0.id == pin.id })?.title {
+                    Text(title)
+                        .font(Theme.jp(12, .bold))
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(Capsule().fill(Theme.surface))
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
+                        .offset(y: -34)
+                }
+            }
     }
 
     /// Figma 16-6: a trip without a destination shows one button on the map.

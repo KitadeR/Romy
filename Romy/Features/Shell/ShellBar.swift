@@ -51,7 +51,8 @@ struct ShellBar: View {
 
             VStack(alignment: .trailing, spacing: 12) {
                 if let note {
-                    noteView(note).transition(.move(edge: .bottom).combined(with: .opacity))
+                    ShellNoteView(note: note, onUndo: onUndo)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 HStack(alignment: .center, spacing: 12) {
                     menuBar
@@ -177,9 +178,14 @@ struct ShellBar: View {
         withAnimation(.bouncy(duration: 0.4, extraBounce: 0.05)) { isShowingAddMenu = isShowing }
     }
 
-    // MARK: - After adding
+}
 
-    private func noteView(_ note: AppShell.ShellNote) -> some View {
+/// The dark note with 「元に戻す」, over the menu bar or over a plan's detail.
+struct ShellNoteView: View {
+    let note: AppShell.ShellNote
+    let onUndo: (AppShell.ShellNote) -> Void
+
+    var body: some View {
         HStack(spacing: 12) {
             Text(note.message)
                 .font(Theme.jp(14, .bold))

@@ -88,6 +88,11 @@ struct ItineraryDays {
         }
     }
 
+    /// The note after 「予定を削除」: 「清水寺を削除しました」.
+    static func deletedMessage(title: String) -> String {
+        "\(title)を削除しました"
+    }
+
     /// The note after marking 済み: 「清水寺を済みにしました」 / 「清水寺の済みを取り消しました」 (Notion 02 §6-5).
     static func doneMessage(title: String, isDone: Bool) -> String {
         isDone ? "\(title)を済みにしました" : "\(title)の済みを取り消しました"

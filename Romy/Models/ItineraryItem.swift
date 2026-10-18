@@ -152,3 +152,63 @@ extension Trip {
         for (index, plan) in items(on: day).enumerated() { plan.order = index }
     }
 }
+
+/// What a plan was, to bring it back after 「予定を削除」 and 「元に戻す」 (Notion 02 §6-6 削除の取り消し).
+/// The plan itself is deleted, so this keeps every stored value.
+struct ItineraryItemSnapshot {
+    let id: UUID
+    let title: String
+    let day: Int?
+    let order: Int
+    let kindRaw: String
+    let category: String?
+    let area: String?
+    let latitude: Double?
+    let longitude: Double?
+    let placeID: String?
+    let createdAt: Date
+    let durationMinutes: Int
+    let fixedStartMinutes: Int?
+    let doneAt: Date?
+}
+
+extension ItineraryItem {
+    func snapshot() -> ItineraryItemSnapshot {
+        ItineraryItemSnapshot(
+            id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
+            latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
+            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt
+        )
+    }
+
+    /// A plan with the same values (and the same place in its day, since the order is kept).
+    static func restored(from snapshot: ItineraryItemSnapshot) -> ItineraryItem {
+        let item = ItineraryItem(
+            title: snapshot.title, day: snapshot.day, order: snapshot.order,
+            kind: PlanKind(rawValue: snapshot.kindRaw) ?? .other, category: snapshot.category, area: snapshot.area,
+            latitude: snapshot.latitude, longitude: snapshot.longitude, placeID: snapshot.placeID,
+            now: snapshot.createdAt
+        )
+        item.id = snapshot.id
+        item.kindRaw = snapshot.kindRaw
+        item.durationMinutes = snapshot.durationMinutes
+        item.fixedStartMinutes = snapshot.fixedStartMinutes
+        item.doneAt = snapshot.doneAt
+        return item
+    }
+}
+
+extension Trip {
+    /// The plan a route to `item` starts from (Notion 02 §6-6 4回目): the plan before it in its day when the trip is
+    /// not in Action. Nil means where the person is: in Action, for the first plan of a day, for 未定,
+    /// and when the plan before has no place.
+    func routeOrigin(for item: ItineraryItem, isAction: Bool) -> ItineraryItem? {
+        guard !isAction else { return nil }
+        let dayCount = ItineraryDays.count(of: dates)
+        guard let day = ItineraryDays.placement(of: item.day, dayCount: dayCount) else { return nil }
+        let plans = items(on: day)
+        guard let index = plans.firstIndex(where: { $0.id == item.id }), index > 0 else { return nil }
+        let before = plans[index - 1]
+        return before.latitude != nil && before.longitude != nil ? before : nil
+    }
+}

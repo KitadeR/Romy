@@ -51,4 +51,16 @@ enum RouteLink {
             launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault]
         )
     }
+
+    /// The route to a place from `origin`, or from where the person is when there is none.
+    static func open(to destination: MKMapItem, from origin: MKMapItem?) {
+        guard let origin else {
+            MKMapItem.openMaps(
+                with: [destination],
+                launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault]
+            )
+            return
+        }
+        open(from: origin, to: destination)
+    }
 }

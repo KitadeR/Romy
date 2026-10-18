@@ -40,3 +40,17 @@ struct DaySchedule {
     /// 「2h 00m」 style used in the sheet's big number.
     static func lengthParts(_ minutes: Int) -> (hours: Int, minutes: Int) { (minutes / 60, minutes % 60) }
 }
+
+extension Trip {
+    /// The times of one day's plans, counted from the trip's 1日の始まり.
+    func schedule(of plans: [ItineraryItem]) -> DaySchedule {
+        DaySchedule(
+            dayStartMinutes: dayStartMinutes,
+            plans: plans.map {
+                DaySchedule.Input(
+                    id: $0.id, durationMinutes: $0.durationMinutes, fixedStartMinutes: $0.fixedStartMinutes
+                )
+            }
+        )
+    }
+}

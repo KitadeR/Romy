@@ -44,11 +44,10 @@ struct AppShell: View {
         }
     }
 
-    /// The dark note with 「元に戻す」: after adding a plan (Notion 02 §6-6, Figma 15-9) and after marking one
-    /// 済み or taking the mark off (Notion 02 §6-5). It lasts about 5 seconds.
+    /// The dark note with 「元に戻す」: after adding a plan (Notion 02 §6-6, Figma 15-9), after marking one
+    /// 済み or taking the mark off (Notion 02 §6-5), and after deleting one (Notion 02 §6-6). It lasts about 5 seconds.
     struct ShellNote: Equatable {
         let id = UUID()
-        let item: ItineraryItem
         let message: String
         let kind: ShellNoteKind
 
@@ -91,6 +90,9 @@ struct AppShell: View {
                         onCreateTrip: createTripFromItinerary,
                         onAdd: { sheet = .plan(day: $0) },
                         onToggleDone: toggleDone,
+                        onDelete: delete,
+                        note: note,
+                        onUndo: undo,
                         bar: { bar }
                     )
                 case .wishlist, .preparation:
@@ -144,7 +146,7 @@ struct AppShell: View {
         highlighted = item.id
         withAnimation(.snappy) {
             note = ShellNote(
-                item: item, message: ItineraryDays.addedMessage(title: item.title, day: item.day), kind: .added
+                message: ItineraryDays.addedMessage(title: item.title, day: item.day), kind: .added(item)
             )
         }
     }
@@ -156,19 +158,34 @@ struct AppShell: View {
         try? modelContext.save()
         withAnimation(.snappy) {
             note = ShellNote(
-                item: item,
                 message: ItineraryDays.doneMessage(title: item.title, isDone: item.doneAt != nil),
-                kind: .markChanged(previous: previous)
+                kind: .markChanged(item, previous: previous)
             )
+        }
+    }
+
+    /// Deletes a plan and offers 「元に戻す」 (Notion 02 §6-6). The order of the other plans is left as it is, so
+    /// bringing the plan back puts it in the same place.
+    private func delete(_ item: ItineraryItem) {
+        let snapshot = item.snapshot()
+        let message = ItineraryDays.deletedMessage(title: item.title)
+        modelContext.delete(item)
+        try? modelContext.save()
+        withAnimation(.snappy) {
+            note = ShellNote(message: message, kind: .deleted(snapshot))
         }
     }
 
     private func undo(_ note: ShellNote) {
         switch note.kind {
-        case .added:
-            modelContext.delete(note.item)
-        case .markChanged(let previous):
-            note.item.doneAt = previous
+        case .added(let item):
+            modelContext.delete(item)
+        case .markChanged(let item, let previous):
+            item.doneAt = previous
+        case .deleted(let snapshot):
+            let restored = ItineraryItem.restored(from: snapshot)
+            modelContext.insert(restored)
+            restored.trip = trip
         }
         try? modelContext.save()
         withAnimation(.snappy) {
@@ -180,7 +197,9 @@ struct AppShell: View {
 
 /// What a note's 「元に戻す」 takes back.
 enum ShellNoteKind {
-    case added
+    case added(ItineraryItem)
     /// The mark the plan had before, to put back.
-    case markChanged(previous: Date?)
+    case markChanged(ItineraryItem, previous: Date?)
+    /// The plan as it was, to bring back.
+    case deleted(ItineraryItemSnapshot)
 }

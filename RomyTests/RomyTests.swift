@@ -754,3 +754,101 @@ struct AreaSearchOrderTests {
         #expect(AreaSearch.nameMatchesFirst([], query: "東京").isEmpty)
     }
 }
+
+struct PlanDetailTests {
+    private func makeTrip(_ dates: TripDates = .days(2)) throws -> (ModelContext, Trip) {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "京都旅行", isNameAuto: true, destinations: [], dates: dates)
+        context.insert(trip)
+        return (context, trip)
+    }
+
+    @discardableResult
+    private func add(
+        _ title: String, day: Int?, hasPlace: Bool, to trip: Trip, in context: ModelContext
+    ) -> ItineraryItem {
+        let item = ItineraryItem(
+            title: title, day: day, order: trip.nextOrder(on: day), kind: hasPlace ? .sight : .nameOnly,
+            latitude: hasPlace ? 35.0 : nil, longitude: hasPlace ? 135.7 : nil
+        )
+        context.insert(item)
+        item.trip = trip
+        return item
+    }
+
+    @Test func aDeletedPlanComesBackAsItWas() throws {
+        let (context, trip) = try makeTrip()
+        add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let middle = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        add("嵐山", day: 1, hasPlace: true, to: trip, in: context)
+        middle.durationMinutes = 90
+        middle.fixedStartMinutes = 13 * 60
+        middle.doneAt = Date(timeIntervalSince1970: 1_000)
+        middle.category = "市場"
+        middle.area = "京都市中京区"
+        let snapshot = middle.snapshot()
+
+        context.delete(middle)
+        context.processPendingChanges()
+        #expect(trip.items(on: 1).map(\.title) == ["伏見稲荷大社", "嵐山"])
+
+        let restored = ItineraryItem.restored(from: snapshot)
+        context.insert(restored)
+        restored.trip = trip
+        #expect(trip.items(on: 1).map(\.title) == ["伏見稲荷大社", "錦市場", "嵐山"])
+        #expect(restored.id == snapshot.id)
+        #expect(restored.durationMinutes == 90)
+        #expect(restored.fixedStartMinutes == 13 * 60)
+        #expect(restored.doneAt == Date(timeIntervalSince1970: 1_000))
+        #expect(restored.category == "市場")
+        #expect(restored.area == "京都市中京区")
+        #expect(restored.latitude == 35.0)
+        #expect(restored.kind == .sight)
+    }
+
+    @Test func aPlanWithoutAPlaceComesBackToo() throws {
+        let (context, trip) = try makeTrip()
+        let item = add("お昼", day: nil, hasPlace: false, to: trip, in: context)
+        let restored = ItineraryItem.restored(from: item.snapshot())
+        #expect(restored.kind == .nameOnly)
+        #expect(restored.day == nil)
+        #expect(restored.latitude == nil)
+    }
+
+    @Test func routeStartsFromThePlanBeforeInPlan() throws {
+        let (context, trip) = try makeTrip()
+        let first = add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false)?.id == first.id)
+    }
+
+    @Test func routeStartsWhereThePersonIsInActionAndForTheFirstPlan() throws {
+        let (context, trip) = try makeTrip()
+        let first = add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: true) == nil)
+        #expect(trip.routeOrigin(for: first, isAction: false) == nil)
+    }
+
+    @Test func routeStartsWhereThePersonIsWhenThePlanBeforeHasNoPlace() throws {
+        let (context, trip) = try makeTrip()
+        add("お昼", day: 1, hasPlace: false, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false) == nil)
+    }
+
+    @Test func undecidedPlansHaveNoRouteOrigin() throws {
+        let (context, trip) = try makeTrip()
+        add("A", day: nil, hasPlace: true, to: trip, in: context)
+        let second = add("B", day: nil, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false) == nil)
+    }
+
+    @Test func deletedMessageNamesThePlan() {
+        #expect(ItineraryDays.deletedMessage(title: "清水寺") == "清水寺を削除しました")
+    }
+}
