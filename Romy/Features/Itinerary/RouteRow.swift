@@ -8,26 +8,31 @@ struct RouteRow: View {
     let origin: ItineraryItem
     let destination: ItineraryItem
     let isOnADay: Bool
+    /// The time line passing through this move; it continues the line of the plan before (nil in 未定).
+    let line: TimeLineStyle?
 
     var body: some View {
-        if isOnADay, let start = RouteLink.mapItem(origin), let end = RouteLink.mapItem(destination) {
-            HStack {
-                Spacer()
-                Button { RouteLink.open(from: start, to: end) } label: {
-                    Text("経路")
-                        .font(Theme.jp(12, .bold))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(Capsule().fill(Theme.fill))
+        Group {
+            if isOnADay, let start = RouteLink.mapItem(origin), let end = RouteLink.mapItem(destination) {
+                HStack {
+                    Spacer()
+                    Button { RouteLink.open(from: start, to: end) } label: {
+                        Text("経路")
+                            .font(Theme.jp(12, .bold))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .background(Capsule().fill(Theme.fill))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(origin.title)から\(destination.title)への経路")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(origin.title)から\(destination.title)への経路")
+                .padding(.vertical, 2)
+            } else {
+                Color.clear.frame(height: 4)
             }
-            .padding(.vertical, 2)
-        } else {
-            Color.clear.frame(height: 4)
         }
+        .background { if isOnADay, let line { TimeLine(style: line) } }
     }
 }
 

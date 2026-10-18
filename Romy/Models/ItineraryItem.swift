@@ -26,6 +26,9 @@ final class ItineraryItem {
     var durationMinutes: Int = 60
     /// Start fixed by the person (鍵), in minutes after midnight; nil while the start is a guess (目安).
     var fixedStartMinutes: Int?
+    /// When the person marked the plan 済み (Notion 02 §6-5 「済みを付ける・外す」); nil while it is not done.
+    /// 今 and スキップ are not stored; they come from the order of the plans (`DayProgress`).
+    var doneAt: Date?
     var trip: Trip?
 
     init(

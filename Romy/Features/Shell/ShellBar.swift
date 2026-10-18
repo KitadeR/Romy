@@ -11,12 +11,12 @@ struct ShellBar: View {
     @Binding var tab: AppShell.Tab
     @Binding var isShowingAddMenu: Bool
     @Binding var sheet: AppShell.AddSheet?
-    @Binding var note: AppShell.AddedNote?
+    @Binding var note: AppShell.ShellNote?
     let trip: Trip
     /// The day a plan added from the ＋ goes to (Notion 02 §6-6 「入れる日」).
     let dayForNewPlan: Int?
     let onAdded: (ItineraryItem) -> Void
-    let onUndo: (AppShell.AddedNote) -> Void
+    let onUndo: (AppShell.ShellNote) -> Void
 
     @Namespace private var glass
     @Namespace private var lens
@@ -179,7 +179,7 @@ struct ShellBar: View {
 
     // MARK: - After adding
 
-    private func noteView(_ note: AppShell.AddedNote) -> some View {
+    private func noteView(_ note: AppShell.ShellNote) -> some View {
         HStack(spacing: 12) {
             Text(note.message)
                 .font(Theme.jp(14, .bold))

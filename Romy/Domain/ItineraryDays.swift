@@ -88,6 +88,11 @@ struct ItineraryDays {
         }
     }
 
+    /// The note after marking 済み: 「清水寺を済みにしました」 / 「清水寺の済みを取り消しました」 (Notion 02 §6-5).
+    static func doneMessage(title: String, isDone: Bool) -> String {
+        isDone ? "\(title)を済みにしました" : "\(title)の済みを取り消しました"
+    }
+
     /// The note after adding (Figma 15-9): 「伏見稲荷大社を1日目に追加しました」.
     static func addedMessage(title: String, day: Int?) -> String {
         "\(title)を\(name(of: day))に追加しました"

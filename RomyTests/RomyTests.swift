@@ -573,3 +573,83 @@ struct DayScheduleTests {
         #expect(DaySchedule.clock(25 * 60 + 5) == "25:05")
     }
 }
+
+struct DayProgressTests {
+    private func plans(_ done: [Bool]) -> [DayProgress.Input] {
+        done.map { DayProgress.Input(id: UUID(), isDone: $0) }
+    }
+
+    private func states(_ inputs: [DayProgress.Input], isToday: Bool = true) -> [DayProgress.State] {
+        let progress = DayProgress(plans: inputs, isToday: isToday)
+        return inputs.map { progress.state(of: $0.id) }
+    }
+
+    @Test func firstPlanIsNowWhenNothingIsDone() {
+        #expect(states(plans([false, false, false])) == [.now, .upcoming, .upcoming])
+    }
+
+    @Test func nowIsTheNextAfterTheLastDone() {
+        #expect(states(plans([true, true, false, false])) == [.done, .done, .now, .upcoming])
+    }
+
+    @Test func notDoneBeforeTheLastDoneIsSkipped() {
+        #expect(states(plans([true, false, true, false])) == [.done, .skipped, .done, .now])
+    }
+
+    @Test func unmarkingAnEarlierPlanSkipsItAndNowStays() {
+        // Everything but the last plan was done; the first is un-marked.
+        #expect(states(plans([false, true, true, false])) == [.skipped, .done, .done, .now])
+    }
+
+    @Test func unmarkingTheLastDoneMakesItNowAgain() {
+        #expect(states(plans([true, true, false])) == [.done, .done, .now])
+        #expect(states(plans([true, false, false])) == [.done, .now, .upcoming])
+    }
+
+    @Test func nothingIsNowWhenEverythingIsDone() {
+        #expect(states(plans([true, true])) == [.done, .done])
+    }
+
+    @Test func otherDaysKeepDoneMarksButHaveNoNowOrSkip() {
+        #expect(states(plans([true, false, true, false]), isToday: false) == [.done, .upcoming, .done, .upcoming])
+    }
+
+    @Test func emptyDayHasNoStates() {
+        #expect(states([]).isEmpty)
+    }
+}
+
+struct TripPhaseTests {
+    private let dates = TripDates.range(start: day(2026, 11, 9), end: day(2026, 11, 11))
+
+    private func phase(_ dates: TripDates, on today: Date) -> TripPhase {
+        TripPhase(dates: dates, today: today, calendar: tokyo)
+    }
+
+    @Test func planUntilTwoDaysBefore() {
+        #expect(phase(dates, on: day(2026, 11, 7)) == .plan)
+    }
+
+    @Test func actionStartsTheDayBefore() {
+        #expect(phase(dates, on: day(2026, 11, 8)) == .action)
+        #expect(phase(dates, on: day(2026, 11, 9)) == .action)
+        #expect(phase(dates, on: day(2026, 11, 11)) == .action)
+    }
+
+    @Test func memoriesAfterTheLastDay() {
+        #expect(phase(dates, on: day(2026, 11, 12)) == .memories)
+    }
+
+    @Test func tripsWithoutFixedDatesStayInPlan() {
+        #expect(phase(.undecided, on: day(2026, 11, 9)) == .plan)
+        #expect(phase(.days(3), on: day(2026, 11, 9)) == .plan)
+    }
+
+    @Test func dayNumberFollowsTheDates() {
+        #expect(dates.dayNumber(on: day(2026, 11, 8), calendar: tokyo) == nil)
+        #expect(dates.dayNumber(on: day(2026, 11, 9), calendar: tokyo) == 1)
+        #expect(dates.dayNumber(on: day(2026, 11, 11), calendar: tokyo) == 3)
+        #expect(dates.dayNumber(on: day(2026, 11, 12), calendar: tokyo) == nil)
+        #expect(TripDates.days(3).dayNumber(on: day(2026, 11, 9), calendar: tokyo) == nil)
+    }
+}

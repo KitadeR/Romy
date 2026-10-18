@@ -4,7 +4,8 @@ import SwiftUI
 /// The map sits behind; the itinerary is Apple's sheet over it with three heights, and the map stays touchable
 /// at the small and middle heights (`presentationBackgroundInteraction`, like Apple Maps).
 /// The sheet covers the bottom of the screen, so the menu bar and ＋ are drawn inside it.
-/// The time column, reordering, moving plans and 済み come next (Notion 05).
+/// In Action (the day before the trip to its last day) today's plans get 済み marks, 今 and the painted
+/// line (Notion 02 §6-5).
 struct ItineraryView<Bar: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
@@ -15,6 +16,8 @@ struct ItineraryView<Bar: View>: View {
     let onCreateTrip: () -> Void
     /// Opens 「行きたい所・予定を追加」 with the day it goes to (nil = 未定).
     let onAdd: (Int?) -> Void
+    /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
+    let onToggleDone: (ItineraryItem) -> Void
     @ViewBuilder let bar: () -> Bar
 
     @State private var isShowingTrips = false
@@ -40,6 +43,9 @@ struct ItineraryView<Bar: View>: View {
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
+    /// The day of the trip that today is; 今 and スキップ exist only there.
+    private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -250,16 +256,36 @@ extension ItineraryView {
                 )
             }
         )
+        // 済み marks only in Action, and only on days (未定 has no order of visits).
+        let progress = isAction && day != nil
+            ? DayProgress(
+                plans: items.map { DayProgress.Input(id: $0.id, isDone: $0.doneAt != nil) },
+                isToday: day == todayNumber
+            )
+            : nil
+        let paintsLine = progress != nil && day == todayNumber
+        let color = Theme.dayColor(day)
+        /// The line of one plan: painted up to 今 in Action's today, grey otherwise, none in 未定.
+        func lineStyle(of item: ItineraryItem) -> TimeLineStyle? {
+            guard day != nil else { return nil }
+            guard paintsLine, let progress else { return .gray }
+            return TimeLineStyle(progress.state(of: item.id), color: color)
+        }
         return VStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
-                    RouteRow(origin: items[index - 1], destination: item, isOnADay: day != nil)
+                    RouteRow(
+                        origin: items[index - 1], destination: item, isOnADay: day != nil,
+                        line: lineStyle(of: items[index - 1])
+                    )
                 }
                 let slot = schedule?.slot(for: item.id)
                 ItineraryRow(
-                    item: item, number: index + 1, color: Theme.dayColor(day),
+                    item: item, number: index + 1, color: color,
                     isHighlighted: item.id == highlighted, slot: slot,
-                    onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } }
+                    progress: progress?.state(of: item.id), line: lineStyle(of: item),
+                    onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } },
+                    onToggleDone: { onToggleDone(item) }
                 )
                 .onTapGesture { moving = item }
                 // Long press lifts the card; dropping it on another plan puts it in that plan's place.
@@ -304,45 +330,5 @@ extension ItineraryView {
         guard createAfterTrips else { return }
         createAfterTrips = false
         onCreateTrip()
-    }
-}
-
-/// A plan card: number in the day's color, name, and the kind (Figma 124:2).
-/// Opening the plan's detail sheet comes with the detail sheet (Notion 05).
-struct ItineraryCard: View {
-    let item: ItineraryItem
-    let number: Int
-    let color: Color
-    let isHighlighted: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(Theme.latin(12, .bold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(color))
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.title)
-                    .font(Theme.jp(16, .bold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let label = item.kind.label {
-                    Text(label)
-                        .font(Theme.jp(11, .bold))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Theme.fill))
-                }
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(isHighlighted ? Theme.ink : Theme.line, lineWidth: isHighlighted ? 2 : 1)
-        )
-        .animation(.easeOut(duration: 0.3), value: isHighlighted)
     }
 }

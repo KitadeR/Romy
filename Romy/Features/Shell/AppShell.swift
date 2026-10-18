@@ -44,12 +44,15 @@ struct AppShell: View {
         }
     }
 
-    /// The note after adding, with 「元に戻す」 (Notion 02 §6-6, Figma 15-9).
-    struct AddedNote: Equatable {
+    /// The dark note with 「元に戻す」: after adding a plan (Notion 02 §6-6, Figma 15-9) and after marking one
+    /// 済み or taking the mark off (Notion 02 §6-5). It lasts about 5 seconds.
+    struct ShellNote: Equatable {
+        let id = UUID()
         let item: ItineraryItem
         let message: String
+        let kind: ShellNoteKind
 
-        static func == (lhs: AddedNote, rhs: AddedNote) -> Bool { lhs.item.id == rhs.item.id }
+        static func == (lhs: ShellNote, rhs: ShellNote) -> Bool { lhs.id == rhs.id }
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -57,7 +60,7 @@ struct AppShell: View {
     @State private var itineraryTab: ItineraryTab = .all
     @State private var isShowingAddMenu = false
     @State private var sheet: AddSheet?
-    @State private var note: AddedNote?
+    @State private var note: ShellNote?
     @State private var highlighted: UUID?
 
     /// 旅程の日のタブからはその日、それ以外は未定 (Notion 02 §6-6 「入れる日」). Action's 「今日」 comes with the Action Home.
@@ -87,6 +90,7 @@ struct AppShell: View {
                         isShowingAddMenu: isShowingAddMenu,
                         onCreateTrip: createTripFromItinerary,
                         onAdd: { sheet = .plan(day: $0) },
+                        onToggleDone: toggleDone,
                         bar: { bar }
                     )
                 case .wishlist, .preparation:
@@ -99,7 +103,7 @@ struct AppShell: View {
                 bar
             }
         }
-        .task(id: note?.item.id) {
+        .task(id: note?.id) {
             guard note != nil else { return }
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
@@ -139,16 +143,44 @@ struct AppShell: View {
         tab = .itinerary
         highlighted = item.id
         withAnimation(.snappy) {
-            note = AddedNote(item: item, message: ItineraryDays.addedMessage(title: item.title, day: item.day))
+            note = ShellNote(
+                item: item, message: ItineraryDays.addedMessage(title: item.title, day: item.day), kind: .added
+            )
         }
     }
 
-    private func undo(_ note: AddedNote) {
-        modelContext.delete(note.item)
+    /// Marks a plan 済み, or takes the mark off, and offers 「元に戻す」 (Notion 02 §6-5).
+    private func toggleDone(_ item: ItineraryItem) {
+        let previous = item.doneAt
+        item.doneAt = previous == nil ? .now : nil
+        try? modelContext.save()
+        withAnimation(.snappy) {
+            note = ShellNote(
+                item: item,
+                message: ItineraryDays.doneMessage(title: item.title, isDone: item.doneAt != nil),
+                kind: .markChanged(previous: previous)
+            )
+        }
+    }
+
+    private func undo(_ note: ShellNote) {
+        switch note.kind {
+        case .added:
+            modelContext.delete(note.item)
+        case .markChanged(let previous):
+            note.item.doneAt = previous
+        }
         try? modelContext.save()
         withAnimation(.snappy) {
             self.note = nil
             highlighted = nil
         }
     }
+}
+
+/// What a note's 「元に戻す」 takes back.
+enum ShellNoteKind {
+    case added
+    /// The mark the plan had before, to put back.
+    case markChanged(previous: Date?)
 }
