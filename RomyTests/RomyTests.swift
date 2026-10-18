@@ -8,6 +8,7 @@
 import Foundation
 import MapKit
 import SwiftData
+import SwiftUI
 import Testing
 @testable import Romy
 
@@ -850,5 +851,115 @@ struct PlanDetailTests {
 
     @Test func deletedMessageNamesThePlan() {
         #expect(ItineraryDays.deletedMessage(title: "清水寺") == "清水寺を削除しました")
+    }
+}
+
+struct ProgressTimeTests {
+    private func plan(_ duration: Int, fixed: Int? = nil, finished: Int? = nil) -> DaySchedule.Input {
+        DaySchedule.Input(id: UUID(), durationMinutes: duration, fixedStartMinutes: fixed, finishedAtMinutes: finished)
+    }
+
+    @Test func plansAfterADoneOneCountFromWhenItWasMarked() {
+        let schedule = DaySchedule(
+            dayStartMinutes: 9 * 60,
+            plans: [plan(60, finished: 9 * 60 + 40), plan(60), plan(30)]
+        )
+        #expect(schedule.slots.map(\.startMinutes) == [540, 580, 640])
+        #expect(schedule.slots.map(\.endMinutes) == [600, 640, 670])
+    }
+
+    @Test func aPlanMarkedEarlyPullsTheNextOneForward() {
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: [plan(60, finished: 9 * 60 + 20), plan(60)])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 560])
+    }
+
+    @Test func aFixedStartDoesNotMoveWhenAnEarlierPlanIsMarked() {
+        let schedule = DaySchedule(
+            dayStartMinutes: 9 * 60,
+            plans: [plan(60, finished: 9 * 60 + 40), plan(60, fixed: 12 * 60), plan(60)]
+        )
+        #expect(schedule.slots.map(\.startMinutes) == [540, 720, 780])
+    }
+
+    @Test func plansNotMarkedKeepTheirGuess() {
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: [plan(60), plan(60), plan(30)])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 600, 660])
+    }
+
+    @Test func theDotStaysInsideThePlan() {
+        let slot = DaySchedule.Slot(id: UUID(), startMinutes: 13 * 60 + 10, endMinutes: 15 * 60, isFixed: false)
+        #expect(slot.progress(at: 12 * 60) == 0)
+        #expect(abs(slot.progress(at: 14 * 60 + 20) - 70.0 / 110.0) < 0.0001)
+        #expect(slot.progress(at: 15 * 60) == 1)
+        #expect(slot.progress(at: 17 * 60) == 1)
+    }
+
+    @Test func theDotMovesBetweenTheInsetsOfTheCard() {
+        #expect(TimeLineLayout.dotY(fraction: 0, rowHeight: 100) == 17)
+        #expect(TimeLineLayout.dotY(fraction: 1, rowHeight: 100) == 83)
+        #expect(TimeLineLayout.dotY(fraction: 0.5, rowHeight: 100) == 50)
+        #expect(TimeLineLayout.dotY(fraction: 1, rowHeight: 20) == 17)
+    }
+
+    @Test func theMarkedTimeCountsOnlyOnTheDayItWasMade() throws {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "京都旅行", isNameAuto: true, destinations: [], dates: .days(2))
+        context.insert(trip)
+        let first = ItineraryItem(title: "A", day: 1, order: 0, kind: .nameOnly)
+        let second = ItineraryItem(title: "B", day: 1, order: 1, kind: .nameOnly)
+        for item in [first, second] {
+            context.insert(item)
+            item.trip = trip
+        }
+        var parts = DateComponents(year: 2026, month: 11, day: 9, hour: 9, minute: 40)
+        parts.timeZone = tokyo.timeZone
+        first.doneAt = tokyo.date(from: parts)
+
+        let sameDay = trip.schedule(of: [first, second], on: day(2026, 11, 9), calendar: tokyo)
+        #expect(sameDay.slots.map(\.startMinutes) == [540, 580])
+        let otherDay = trip.schedule(of: [first, second], on: day(2026, 11, 10), calendar: tokyo)
+        #expect(otherDay.slots.map(\.startMinutes) == [540, 600])
+        let noDate = trip.schedule(of: [first, second])
+        #expect(noDate.slots.map(\.startMinutes) == [540, 600])
+    }
+
+    @Test func nowIsDrawnLastAndDoneKeepsItsFlag() {
+        let plans = [
+            MapPin(id: UUID(), number: 1, day: 1, latitude: 35, longitude: 135, isDone: true),
+            MapPin(id: UUID(), number: 2, day: 1, latitude: 35, longitude: 135, isNow: true),
+            MapPin(id: UUID(), number: 3, day: 1, latitude: 35, longitude: 135)
+        ]
+        let ordered = ItineraryPins.drawingOrder(plans)
+        #expect(ordered.map(\.number) == [1, 3, 2])
+        #expect(ordered[0].isDone)
+    }
+}
+
+struct TimeLineStyleTests {
+    @Test func theMoveAfterNowKeepsTheLineWithoutTheDot() {
+        let style = TimeLineStyle(.now, color: .red, fraction: 0.4)
+        guard case .progress = style else {
+            Issue.record("今 should have a progress line")
+            return
+        }
+        guard case .dotted = style.forMove else {
+            Issue.record("the move after 今 should be dotted")
+            return
+        }
+    }
+
+    @Test func otherMovesKeepTheirStyle() {
+        guard case .solid = TimeLineStyle(.done, color: .red).forMove else {
+            Issue.record("a done plan's move should stay solid")
+            return
+        }
+        guard case .gray = TimeLineStyle(.upcoming, color: .red).forMove else {
+            Issue.record("an upcoming plan's move should stay grey")
+            return
+        }
     }
 }

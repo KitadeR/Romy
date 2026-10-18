@@ -10,6 +10,8 @@ struct RouteRow: View {
     let isOnADay: Bool
     /// The time line passing through this move; it continues the line of the plan before (nil in 未定).
     let line: TimeLineStyle?
+    /// The day's color when this is the move from 今 to the next plan (Notion 02 §6-5); nil otherwise.
+    var highlight: Color?
 
     var body: some View {
         Group {
@@ -19,10 +21,10 @@ struct RouteRow: View {
                     Button { RouteLink.open(from: start, to: end) } label: {
                         Text("経路")
                             .font(Theme.jp(12, .bold))
-                            .foregroundStyle(Theme.ink)
+                            .foregroundStyle(highlight == nil ? Theme.ink : .white)
                             .padding(.horizontal, 12)
                             .frame(height: 28)
-                            .background(Capsule().fill(Theme.fill))
+                            .background(Capsule().fill(highlight ?? Theme.fill))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(origin.title)から\(destination.title)への経路")

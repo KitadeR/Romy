@@ -149,7 +149,8 @@ struct ItineraryView<Bar: View>: View {
         let dayCount = ItineraryDays.count(of: trip.dates)
         let day = ItineraryDays.placement(of: item.day, dayCount: dayCount)
         let plans = trip.items(on: day)
-        let slot = day == nil ? nil : trip.schedule(of: plans).slot(for: item.id)
+        let slot = day == nil
+            ? nil : trip.schedule(of: plans, on: days.date(of: day), calendar: text.calendar).slot(for: item.id)
         return PlanDetailView(
             item: item,
             number: (plans.firstIndex { $0.id == item.id } ?? 0) + 1,
@@ -317,9 +318,17 @@ extension ItineraryView {
         }
     }
 
+    /// The cards of a day. The dot of 今 follows the clock, so the list is drawn again every 30 seconds.
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            cardList(items, day: day, now: context.date)
+        }
+    }
+
+    private func cardList(_ items: [ItineraryItem], day: Int?, now: Date) -> some View {
         // 未定 has no order of visits, so no times; a day shows them (Notion 02 §6-5).
-        let schedule = day == nil ? nil : trip.schedule(of: items)
+        let schedule = day == nil ? nil : trip.schedule(of: items, on: days.date(of: day), calendar: text.calendar)
+        let nowMinutes = Trip.minutes(of: now, on: now, calendar: text.calendar) ?? 0
         // 済み marks only in Action, and only on days (未定 has no order of visits).
         let progress = isAction && day != nil
             ? DayProgress(
@@ -333,14 +342,16 @@ extension ItineraryView {
         func lineStyle(of item: ItineraryItem) -> TimeLineStyle? {
             guard day != nil else { return nil }
             guard paintsLine, let progress else { return .gray }
-            return TimeLineStyle(progress.state(of: item.id), color: color)
+            let fraction = schedule?.slot(for: item.id)?.progress(at: nowMinutes) ?? 0
+            return TimeLineStyle(progress.state(of: item.id), color: color, fraction: fraction)
         }
         return VStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     RouteRow(
                         origin: items[index - 1], destination: item, isOnADay: day != nil,
-                        line: lineStyle(of: items[index - 1])
+                        line: lineStyle(of: items[index - 1])?.forMove,
+                        highlight: paintsLine && progress?.state(of: items[index - 1].id) == .now ? color : nil
                     )
                 }
                 let slot = schedule?.slot(for: item.id)
@@ -367,18 +378,7 @@ extension ItineraryView {
 
     /// Empty day: a dashed box that opens adding with this day already chosen (Notion 02 §6-6, 案A).
     private func addBox(_ title: String, day: Int?) -> some View {
-        Button { onAdd(day) } label: {
-            Label(title, systemImage: "plus")
-                .font(Theme.jp(14, .bold))
-                .foregroundStyle(Theme.ink)
-                .frame(maxWidth: .infinity, minHeight: 64)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Theme.faint, style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        DashedAddBox(title: title) { onAdd(day) }
     }
 
     // MARK: - Helpers

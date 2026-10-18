@@ -37,6 +37,11 @@ struct ItineraryDays {
         }
     }
 
+    /// The date of a day of the trip; nil for 未定 and for a trip without dates.
+    func date(of day: Int?) -> Date? {
+        day.flatMap { number in days.first { $0.number == number }?.date }
+    }
+
     static func count(of dates: TripDates, calendar: Calendar = .current) -> Int {
         switch dates {
         case .undecided: 0

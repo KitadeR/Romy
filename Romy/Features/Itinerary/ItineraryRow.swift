@@ -2,16 +2,26 @@ import SwiftUI
 
 /// The vertical line joining the times in the left column (Notion 02 §6-5 「縦の線＝今の線」).
 /// In Action it is painted in the day's color up to 今 and dotted from 今 to the next plan; otherwise it is grey.
+/// The dot of 今 moves down the plan with the time and stops at its bottom edge.
 enum TimeLineStyle {
     case solid(Color)
+    /// The move after 今 up to the next plan: dotted, without a dot of its own.
     case dotted(Color)
+    /// 今: painted down to the dot (`fraction` of the way through the plan), dotted below it.
+    case progress(Color, fraction: Double)
     case gray
 
-    /// Style for a plan in Action's day, or for its move row after it.
-    init(_ state: DayProgress.State, color: Color) {
+    /// The style of the move row after a plan: the line goes on, but the dot stays with the plan.
+    var forMove: TimeLineStyle {
+        if case .progress(let color, _) = self { .dotted(color) } else { self }
+    }
+
+    /// Style for a plan in Action's day, or for its move row after it. `fraction` is how far the time is
+    /// through the plan; it is only used for 今.
+    init(_ state: DayProgress.State, color: Color, fraction: Double = 0) {
         switch state {
         case .done, .skipped: self = .solid(color)
-        case .now: self = .dotted(color)
+        case .now: self = .progress(color, fraction: fraction)
         case .upcoming: self = .gray
         }
     }
@@ -25,6 +35,13 @@ enum TimeLineLayout {
     static let lineX: CGFloat = timeWidth + 4
     /// The plans are 6pt apart, so a segment reaches 6pt below its row to meet the next one.
     static let reach: CGFloat = 6
+    /// The dot moves between these distances from the top and the bottom of the card.
+    static let dotInset: CGFloat = 17
+
+    static func dotY(fraction: Double, rowHeight: CGFloat) -> CGFloat {
+        let bottom = max(dotInset, rowHeight - dotInset)
+        return dotInset + CGFloat(min(max(fraction, 0), 1)) * (bottom - dotInset)
+    }
 }
 
 struct TimeLine: View {
@@ -33,28 +50,37 @@ struct TimeLine: View {
     var body: some View {
         GeometryReader { geometry in
             let height = geometry.size.height + TimeLineLayout.reach
-            Path { path in
-                path.move(to: CGPoint(x: 1, y: 0))
-                path.addLine(to: CGPoint(x: 1, y: height))
+            ZStack {
+                switch style {
+                case .solid(let color):
+                    stroke(color, from: 0, to: height, dotted: false)
+                case .gray:
+                    stroke(Theme.line, from: 0, to: height, dotted: false)
+                case .dotted(let color):
+                    stroke(color, from: 0, to: height, dotted: true)
+                case .progress(let color, let fraction):
+                    let dotY = TimeLineLayout.dotY(fraction: fraction, rowHeight: geometry.size.height)
+                    stroke(color, from: 0, to: dotY, dotted: false)
+                    stroke(color, from: dotY, to: height, dotted: true)
+                    Circle()
+                        .fill(color)
+                        .frame(width: 9, height: 9)
+                        .position(x: TimeLineLayout.lineX + 1, y: dotY)
+                }
             }
-            .stroke(
-                color,
-                style: StrokeStyle(lineWidth: 2, lineCap: isDotted ? .round : .butt, dash: isDotted ? [0.1, 5] : [])
-            )
-            .offset(x: TimeLineLayout.lineX)
         }
         .allowsHitTesting(false)
     }
 
-    private var color: Color {
-        switch style {
-        case .solid(let color), .dotted(let color): color
-        case .gray: Theme.line
+    private func stroke(_ color: Color, from top: CGFloat, to bottom: CGFloat, dotted: Bool) -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: TimeLineLayout.lineX + 1, y: top))
+            path.addLine(to: CGPoint(x: TimeLineLayout.lineX + 1, y: bottom))
         }
-    }
-
-    private var isDotted: Bool {
-        if case .dotted = style { true } else { false }
+        .stroke(
+            color,
+            style: StrokeStyle(lineWidth: 2, lineCap: dotted ? .round : .butt, dash: dotted ? [0.1, 5] : [])
+        )
     }
 }
 
@@ -85,16 +111,6 @@ struct ItineraryRow: View {
             )
         }
         .background { if let line, slot != nil { TimeLine(style: line) } }
-        .overlay(alignment: .topLeading) {
-            // The dot sits at the start of 今 (it moves down with the clock later; Notion 05).
-            if progress == .now, slot != nil {
-                Circle()
-                    .fill(color)
-                    .frame(width: 9, height: 9)
-                    .offset(x: TimeLineLayout.lineX + 1 - 4.5, y: 17)
-                    .allowsHitTesting(false)
-            }
-        }
     }
 
     private func timeColumn(_ slot: DaySchedule.Slot) -> some View {

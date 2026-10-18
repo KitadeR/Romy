@@ -8,6 +8,9 @@ struct MapPin: Identifiable, Equatable {
     let day: Int
     let latitude: Double
     let longitude: Double
+    /// In Action a plan marked 済み is grey, and 今 is drawn on top (Notion 02 §6-5 「地図の決まり」).
+    var isDone = false
+    var isNow = false
 
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
@@ -25,11 +28,20 @@ enum ItineraryPins {
 
     /// Numbers count every plan of the day, so a pin keeps the same number as its card
     /// even when a plan before it has no place.
-    static func pins(day: Int, items: [ItineraryItem]) -> [MapPin] {
+    static func pins(day: Int, items: [ItineraryItem], progress: DayProgress? = nil) -> [MapPin] {
         items.enumerated().compactMap { index, item in
             guard let latitude = item.latitude, let longitude = item.longitude else { return nil }
-            return MapPin(id: item.id, number: index + 1, day: day, latitude: latitude, longitude: longitude)
+            let state = progress?.state(of: item.id)
+            return MapPin(
+                id: item.id, number: index + 1, day: day, latitude: latitude, longitude: longitude,
+                isDone: state == .done, isNow: state == .now
+            )
         }
+    }
+
+    /// Pins in drawing order: 今 last, so it lies on top of the others.
+    static func drawingOrder(_ pins: [MapPin]) -> [MapPin] {
+        pins.filter { !$0.isNow } + pins.filter(\.isNow)
     }
 
     /// The area that holds all the points, with room around them. One point gets a street-level area.
@@ -96,9 +108,19 @@ struct ItineraryMap: View {
     @State private var position: MapCameraPosition = .rect(ItineraryPins.rect(of: PlaceSearch.japan))
     @State private var destinationPoints: [CLLocationCoordinate2D] = []
 
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now) == .action }
+
     private var groups: [(day: Int, pins: [MapPin])] {
-        ItineraryPins.days(for: selection, dayCount: ItineraryDays.count(of: trip.dates)).map { day in
-            (day, ItineraryPins.pins(day: day, items: trip.items(on: day)))
+        let today = trip.dates.dayNumber(on: .now)
+        return ItineraryPins.days(for: selection, dayCount: ItineraryDays.count(of: trip.dates)).map { day in
+            let items = trip.items(on: day)
+            let progress = isAction
+                ? DayProgress(
+                    plans: items.map { DayProgress.Input(id: $0.id, isDone: $0.doneAt != nil) },
+                    isToday: day == today
+                )
+                : nil
+            return (day, ItineraryPins.pins(day: day, items: items, progress: progress))
         }
     }
 
@@ -120,7 +142,7 @@ struct ItineraryMap: View {
                         )
                 }
             }
-            ForEach(pins) { pin in
+            ForEach(ItineraryPins.drawingOrder(pins)) { pin in
                 Annotation("", coordinate: pin.coordinate, anchor: .center) {
                     Button {
                         onSelect(pin.id)
@@ -161,7 +183,7 @@ struct ItineraryMap: View {
             .font(Theme.latin(12, .bold))
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
-            .background(Circle().fill(Theme.dayColor(pin.day)))
+            .background(Circle().fill(pin.isDone ? Theme.secondary : Theme.dayColor(pin.day)))
             .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
             .overlay(alignment: .top) {
