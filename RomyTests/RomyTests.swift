@@ -723,3 +723,34 @@ struct PlaceSearchSuggestionTests {
         #expect(suggestion("東京駅", town: nil).detail == "場所")
     }
 }
+
+struct AreaSearchOrderTests {
+    private func sight(_ title: String) -> AreaSearch.Result {
+        AreaSearch.Result(title: title, detail: "", kind: .landmark, completion: nil, item: nil)
+    }
+
+    @Test func nameMatchesComeBeforeLooseOnes() {
+        let sights = ["東京ディズニーシー", "東京ドイツ村", "東京ドームシティ", "東京サマーランド", "東京ジョイポリス", "東京駅"]
+            .map(sight)
+        let ordered = AreaSearch.nameMatchesFirst(sights, query: "東京駅")
+        #expect(ordered.map(\.title) == ["東京駅", "東京ディズニーシー", "東京ドイツ村", "東京ドームシティ", "東京サマーランド"])
+    }
+
+    @Test func orderIsKeptWithinEachGroup() {
+        let sights = ["B公園", "Aランド", "Cランド", "Dパーク"].map(sight)
+        let ordered = AreaSearch.nameMatchesFirst(sights, query: "ランド")
+        #expect(ordered.map(\.title) == ["Aランド", "Cランド", "B公園", "Dパーク"])
+    }
+
+    @Test func kanaAndWidthAreIgnoredWhenMatching() {
+        let sights = ["東京ドーム", "東京ディズニーランド"].map(sight)
+        #expect(AreaSearch.nameMatchesFirst(sights, query: "でぃずにー").map(\.title)
+            == ["東京ディズニーランド", "東京ドーム"])
+    }
+
+    @Test func atMostTheLimitIsKept() {
+        let sights = (0..<10).map { sight("場所\($0)") }
+        #expect(AreaSearch.nameMatchesFirst(sights, query: "場所").count == 5)
+        #expect(AreaSearch.nameMatchesFirst([], query: "東京").isEmpty)
+    }
+}
