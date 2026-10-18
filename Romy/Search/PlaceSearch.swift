@@ -5,8 +5,12 @@ import Observation
 /// Apple's search for places to add as plans (Notion 02 §6-6 ＋ボタン ①, Figma 15-3).
 /// Results lean toward the trip's destinations. One search runs after typing pauses, since Apple limits
 /// how often a device may search (Notion 05, 2026-10-14).
+///
+/// A search for a wide name such as 「東京」 returns only the area itself (東京都), so the completer, which is
+/// meant for typing, adds suggestions (東京駅, 東京タワー…). When the typed text is an area, the completer is
+/// pointed at that area, otherwise it leans toward the trip's destinations (it would follow the device).
 @Observable
-final class PlaceSearch {
+final class PlaceSearch: NSObject, MKLocalSearchCompleterDelegate {
     struct Result: Identifiable, Hashable {
         let id: String
         let title: String
@@ -15,7 +19,9 @@ final class PlaceSearch {
         let kind: PlanKind
         /// Town from the address (「京都市」), shown next to the category.
         let town: String?
-        let item: MKMapItem
+        /// The place. Nil for a suggestion from the completer, which is looked up when it is added (`resolve`).
+        var item: MKMapItem?
+        var completion: MKLocalSearchCompletion?
 
         var detail: String {
             guard let town, !town.isEmpty else { return category }
@@ -26,6 +32,17 @@ final class PlaceSearch {
     private(set) var results: [Result] = []
     private var region: MKCoordinateRegion?
     private var task: Task<Void, Never>?
+    @ObservationIgnored private let completer = MKLocalSearchCompleter()
+    /// The suggestions being waited for; one request at a time.
+    @ObservationIgnored private var waiting: CheckedContinuation<[MKLocalSearchCompletion], Never>?
+    @ObservationIgnored private var waitingToken = 0
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        // Not 「近くを検索」 suggestions (.query): they are searches, not places.
+        completer.resultTypes = [.pointOfInterest, .address]
+    }
 
     static let japan = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.5, longitude: 137.5),
@@ -130,9 +147,17 @@ final class PlaceSearch {
         task = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, let self else { return }
-            let found = await Self.search(trimmed, near: region)
+            let nearby = region ?? Self.japan
+            async let searched = Self.search(trimmed, near: region)
+            async let suggested = suggestions(for: trimmed, in: nearby)
+            let found = await searched
+            var suggestions = await suggested
+            // The typed text is an area (「東京」): ask the completer about that area instead.
+            if let center = Self.areaCenter(in: found, matching: trimmed), !Task.isCancelled {
+                suggestions = await self.suggestions(for: trimmed, in: Self.areaRegion(around: center))
+            }
             guard !Task.isCancelled else { return }
-            results = found
+            results = Self.merge(suggestions: suggestions.map(Self.result(from:)), found: found)
         }
     }
 
@@ -144,15 +169,98 @@ final class PlaceSearch {
         let items = (try? await MKLocalSearch(request: request).start().mapItems) ?? []
         var seen = Set<String>()
         return items.prefix(15).compactMap { item in
-            guard let name = item.name, !name.isEmpty else { return nil }
-            let coordinate = item.location.coordinate
-            let id = item.identifier?.rawValue
-                ?? String(format: "%@:%.5f,%.5f", name, coordinate.latitude, coordinate.longitude)
-            guard seen.insert(id).inserted else { return nil }
-            let category = category(of: item)
-            let town = Self.town(from: item.address?.fullAddress ?? item.addressRepresentations?.cityName ?? "")
-            return Result(id: id, title: name, category: category.label, kind: category.kind, town: town, item: item)
+            guard let result = result(from: item), seen.insert(result.id).inserted else { return nil }
+            return result
         }
+    }
+
+    static func result(from item: MKMapItem, fallbackTitle: String? = nil) -> Result? {
+        guard let name = item.name.flatMap({ $0.isEmpty ? nil : $0 }) ?? fallbackTitle else { return nil }
+        let coordinate = item.location.coordinate
+        let id = item.identifier?.rawValue
+            ?? String(format: "%@:%.5f,%.5f", name, coordinate.latitude, coordinate.longitude)
+        let category = category(of: item)
+        let town = town(from: item.address?.fullAddress ?? item.addressRepresentations?.cityName ?? "")
+        return Result(id: id, title: name, category: category.label, kind: category.kind, town: town, item: item)
+    }
+
+    /// A suggestion from the completer. Its kind is not known until it is looked up when added.
+    static func result(from completion: MKLocalSearchCompletion) -> Result {
+        Result(
+            id: "suggestion:\(completion.title)|\(completion.subtitle)",
+            title: completion.title, category: "場所", kind: .other,
+            town: town(from: completion.subtitle), item: nil, completion: completion
+        )
+    }
+
+    /// The place behind a result: a suggestion is looked up with Apple's search; nil when that fails.
+    static func resolve(_ result: Result) async -> Result? {
+        if result.item != nil { return result }
+        guard let completion = result.completion,
+              let item = try? await MKLocalSearch(request: MKLocalSearch.Request(completion: completion))
+                  .start().mapItems.first else { return nil }
+        return Self.result(from: item, fallbackTitle: result.title)
+    }
+
+    // MARK: - Suggestions
+
+    /// Where the typed area is, when one of the found places is an area (no place category, 「東京都」)
+    /// whose name contains what was typed.
+    static func areaCenter(in found: [Result], matching typed: String) -> CLLocationCoordinate2D? {
+        found.first { $0.item?.pointOfInterestCategory == nil && AreaSearch.name($0.title, contains: typed) }?
+            .item?.location.coordinate
+    }
+
+    static func areaRegion(around center: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
+    }
+
+    /// Suggestions first (they are what people look for by name), each replaced by the found place of the same
+    /// name when there is one (it knows its category); then the rest of the found places.
+    static func merge(suggestions: [Result], found: [Result], limit: Int = 15) -> [Result] {
+        var merged: [Result] = []
+        var used = Set<String>()
+        for suggestion in suggestions {
+            if let match = found.first(where: { $0.title == suggestion.title && !used.contains($0.id) }) {
+                used.insert(match.id)
+                merged.append(match)
+            } else if !merged.contains(where: { $0.title == suggestion.title && $0.town == suggestion.town }) {
+                merged.append(suggestion)
+            }
+        }
+        merged += found.filter { !used.contains($0.id) }
+        return Array(merged.prefix(limit))
+    }
+
+    /// Asks the completer once. A new request ends the one still waiting; no answer in 2 seconds gives none.
+    private func suggestions(for query: String, in region: MKCoordinateRegion) async -> [MKLocalSearchCompletion] {
+        finish([])
+        completer.cancel()
+        completer.region = region
+        waitingToken += 1
+        let token = waitingToken
+        return await withCheckedContinuation { continuation in
+            waiting = continuation
+            completer.queryFragment = query
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                if self?.waitingToken == token { self?.finish([]) }
+            }
+        }
+    }
+
+    private func finish(_ completions: [MKLocalSearchCompletion]) {
+        waiting?.resume(returning: completions)
+        waiting = nil
+    }
+
+    nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        let found = Array(completer.results.prefix(10))
+        Task { @MainActor in self.finish(found) }
+    }
+
+    nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        Task { @MainActor in self.finish([]) }
     }
 
     /// Town from an address, kept only when it really is a town (「清水町」「京都市」).

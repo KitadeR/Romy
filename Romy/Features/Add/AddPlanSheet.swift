@@ -14,6 +14,8 @@ struct AddPlanSheet: View {
     @State private var day: Int?
     @State private var query = ""
     @State private var search = PlaceSearch()
+    /// The suggestion being looked up after it was tapped (it needs its place from Apple's search).
+    @State private var resolvingID: String?
     @FocusState private var isTyping: Bool
 
     private let text = DateText(calendar: .current, holidays: .bundled)
@@ -57,7 +59,8 @@ struct AddPlanSheet: View {
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundStyle(Theme.secondary)),
                                 title: result.title,
-                                detail: result.detail
+                                detail: result.detail,
+                                isBusy: resolvingID == result.id
                             ) { add(result) }
                         }
                     }
@@ -136,7 +139,9 @@ struct AddPlanSheet: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.fill))
     }
 
-    private func row(icon: AnyView, title: String, detail: String, action: @escaping () -> Void) -> some View {
+    private func row(
+        icon: AnyView, title: String, detail: String, isBusy: Bool = false, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 icon
@@ -157,6 +162,7 @@ struct AddPlanSheet: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line, lineWidth: 1))
             .contentShape(Rectangle())
+            .opacity(isBusy ? 0.5 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title)、\(detail)、追加")
@@ -164,12 +170,32 @@ struct AddPlanSheet: View {
 
     // MARK: - Adding
 
-    private func addByName() {
-        insert(ItineraryItem(title: typed, day: day, order: trip.nextOrder(on: day), kind: .nameOnly))
+    private func addByName(_ title: String? = nil) {
+        insert(ItineraryItem(title: title ?? typed, day: day, order: trip.nextOrder(on: day), kind: .nameOnly))
     }
 
+    /// A suggestion has no place yet, so it is looked up first; if that fails it is added by name.
     private func add(_ result: PlaceSearch.Result) {
-        let coordinate = result.item.location.coordinate
+        guard resolvingID == nil else { return }
+        guard result.item == nil else {
+            addPlace(result)
+            return
+        }
+        resolvingID = result.id
+        Task {
+            let resolved = await PlaceSearch.resolve(result)
+            resolvingID = nil
+            if let resolved {
+                addPlace(resolved)
+            } else {
+                addByName(result.title)
+            }
+        }
+    }
+
+    private func addPlace(_ result: PlaceSearch.Result) {
+        guard let place = result.item else { return }
+        let coordinate = place.location.coordinate
         let item = ItineraryItem(
             title: result.title,
             day: day,
@@ -179,7 +205,7 @@ struct AddPlanSheet: View {
             area: result.town,
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
-            placeID: result.item.identifier?.rawValue
+            placeID: place.identifier?.rawValue
         )
         insert(item)
         // The ward is looked up once, after saving, so adding is not kept waiting.

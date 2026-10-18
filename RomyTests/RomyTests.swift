@@ -653,3 +653,73 @@ struct TripPhaseTests {
         #expect(TripDates.days(3).dayNumber(on: day(2026, 11, 9), calendar: tokyo) == nil)
     }
 }
+
+struct PlaceSearchSuggestionTests {
+    private func place(
+        _ name: String, category: MKPointOfInterestCategory? = nil, lat: Double = 35.68
+    ) -> PlaceSearch.Result {
+        let item = MKMapItem(location: CLLocation(latitude: lat, longitude: 139.76), address: nil)
+        item.name = name
+        item.pointOfInterestCategory = category
+        return PlaceSearch.result(from: item)!
+    }
+
+    private func suggestion(_ title: String, town: String? = "千代田区") -> PlaceSearch.Result {
+        PlaceSearch.Result(
+            id: "suggestion:\(title)", title: title, category: "場所", kind: .other,
+            town: town, item: nil, completion: nil
+        )
+    }
+
+    @Test func suggestionsComeFirstThenTheFoundPlaces() {
+        let merged = PlaceSearch.merge(
+            suggestions: [suggestion("東京駅"), suggestion("東京タワー", town: "港区")],
+            found: [place("東京都")]
+        )
+        #expect(merged.map(\.title) == ["東京駅", "東京タワー", "東京都"])
+        #expect(merged.map { $0.item == nil } == [true, true, false])
+    }
+
+    @Test func aFoundPlaceTakesTheSpotOfItsSuggestion() {
+        let tower = place("東京タワー", category: .landmark)
+        let merged = PlaceSearch.merge(
+            suggestions: [suggestion("東京駅"), suggestion("東京タワー", town: "港区")],
+            found: [tower]
+        )
+        #expect(merged.map(\.title) == ["東京駅", "東京タワー"])
+        #expect(merged[1].id == tower.id)
+        #expect(merged[1].item != nil)
+        #expect(merged[1].category == "名所")
+    }
+
+    @Test func theSameSuggestionIsShownOnce() {
+        let merged = PlaceSearch.merge(suggestions: [suggestion("東京駅"), suggestion("東京駅")], found: [])
+        #expect(merged.count == 1)
+    }
+
+    @Test func mergeKeepsAtMostTheLimit() {
+        let suggestions = (0..<12).map { suggestion("場所\($0)", town: "区\($0)") }
+        let found = (0..<12).map { place("店\($0)", lat: 35 + Double($0) / 10) }
+        #expect(PlaceSearch.merge(suggestions: suggestions, found: found, limit: 15).count == 15)
+    }
+
+    @Test func areaCenterIsTheAreaNotAPlace() throws {
+        let area = place("東京都", lat: 35.69)
+        let station = place("東京駅", category: .landmark, lat: 35.68)
+        let center = try #require(PlaceSearch.areaCenter(in: [station, area], matching: "東京"))
+        #expect(abs(center.latitude - 35.69) < 0.0001)
+        #expect(PlaceSearch.areaCenter(in: [station], matching: "東京") == nil)
+        #expect(PlaceSearch.areaCenter(in: [area], matching: "大阪") == nil)
+    }
+
+    @Test func areaRegionIsCenteredOnTheArea() {
+        let region = PlaceSearch.areaRegion(around: CLLocationCoordinate2D(latitude: 35.69, longitude: 139.69))
+        #expect(region.center.latitude == 35.69)
+        #expect(region.span.latitudeDelta == 0.5)
+    }
+
+    @Test func suggestionDetailShowsItsTown() {
+        #expect(suggestion("東京駅").detail == "場所 ・ 千代田区")
+        #expect(suggestion("東京駅", town: nil).detail == "場所")
+    }
+}
