@@ -29,6 +29,9 @@ final class ItineraryItem {
     /// When the person marked the plan 済み (Notion 02 §6-5 「済みを付ける・外す」); nil while it is not done.
     /// 今 and スキップ are not stored; they come from the order of the plans (`DayProgress`).
     var doneAt: Date?
+    /// How the person goes from the plan before to this one, when they chose it (Notion 02 §6-5 ②移動の行);
+    /// nil means the first guess (`TravelMode.defaultMode`).
+    var travelModeRaw: String?
     var trip: Trip?
 
     init(
@@ -59,6 +62,11 @@ final class ItineraryItem {
     var kind: PlanKind {
         get { PlanKind(rawValue: kindRaw) ?? .other }
         set { kindRaw = newValue.rawValue }
+    }
+
+    var travelMode: TravelMode? {
+        get { travelModeRaw.flatMap(TravelMode.init(rawValue:)) }
+        set { travelModeRaw = newValue?.rawValue }
     }
 }
 
@@ -170,6 +178,7 @@ struct ItineraryItemSnapshot {
     let durationMinutes: Int
     let fixedStartMinutes: Int?
     let doneAt: Date?
+    let travelModeRaw: String?
 }
 
 extension ItineraryItem {
@@ -177,7 +186,8 @@ extension ItineraryItem {
         ItineraryItemSnapshot(
             id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
             latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
-            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt
+            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt,
+            travelModeRaw: travelModeRaw
         )
     }
 
@@ -194,6 +204,7 @@ extension ItineraryItem {
         item.durationMinutes = snapshot.durationMinutes
         item.fixedStartMinutes = snapshot.fixedStartMinutes
         item.doneAt = snapshot.doneAt
+        item.travelModeRaw = snapshot.travelModeRaw
         return item
     }
 }

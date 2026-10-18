@@ -963,3 +963,125 @@ struct TimeLineStyleTests {
         }
     }
 }
+
+struct TravelTimeTests {
+    private func place(_ title: String, _ lat: Double, _ lon: Double) -> ItineraryItem {
+        ItineraryItem(title: title, day: 1, order: 0, kind: .sight, latitude: lat, longitude: lon)
+    }
+
+    @Test func shortMovesStartAsWalkingAndLongOnesAsTheTrain() {
+        #expect(TravelMode.defaultMode(straightMeters: 300) == .walking)
+        #expect(TravelMode.defaultMode(straightMeters: 1500) == .walking)
+        #expect(TravelMode.defaultMode(straightMeters: 1501) == .transit)
+    }
+
+    @Test func theChosenModeWinsOverTheFirstGuess() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let shinjuku = place("新宿駅", 35.6896, 139.7006)
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .transit)
+        shinjuku.travelMode = .driving
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .driving)
+        shinjuku.travelMode = nil
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .transit)
+    }
+
+    @Test func aMoveNeedsAPlaceAtBothEnds() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let lunch = ItineraryItem(title: "お昼", day: 1, order: 1, kind: .nameOnly)
+        #expect(TravelTimes.move(from: tokyo, to: lunch) == nil)
+        #expect(TravelTimes.move(from: lunch, to: tokyo) == nil)
+    }
+
+    @Test func aDifferentModeOrPlaceIsADifferentMove() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        let walking = TravelTimes.move(from: tokyo, to: tower)
+        tower.travelMode = .driving
+        let driving = TravelTimes.move(from: tokyo, to: tower)
+        #expect(walking != driving)
+        tower.latitude = 35.0
+        #expect(TravelTimes.move(from: tokyo, to: tower) != driving)
+    }
+
+    @Test func theSameMoveByAnotherModeKeepsItsPlaces() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        let walking = TravelTimes.move(from: tokyo, to: tower)
+        let driving = walking?.with(mode: .driving)
+        #expect(driving?.mode == .driving)
+        #expect(driving?.fromID == walking?.fromID)
+        #expect(driving?.toLatitude == walking?.toLatitude)
+        #expect(driving != walking)
+    }
+
+    @Test func nothingIsCountedUntilApplesAnswers() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        #expect(TravelTimes().minutes(from: tokyo, to: tower) == 0)
+        #expect(TravelTimes().estimate(for: TravelTimes.move(from: tokyo, to: tower)) == nil)
+    }
+
+    @Test func aTrainRouteFarShorterThanTheStraightLineIsNotUsed() {
+        // 東京駅→丸ビル: Apple answered 48 m for a straight line of about 380 m.
+        #expect(!TravelEstimate(minutes: 1, meters: 48).isPlausible(straightMeters: 380))
+        #expect(TravelEstimate(minutes: 13, meters: 10296).isPlausible(straightMeters: 5800))
+        #expect(TravelEstimate(minutes: 5, meters: 477).isPlausible(straightMeters: 380))
+    }
+
+    @Test func anEstimateIsWrittenInMinutesAndMeters() {
+        #expect(TravelEstimate(seconds: 300, meters: 477).durationText == "5分")
+        #expect(TravelEstimate(seconds: 20, meters: 40).minutes == 1)
+        #expect(TravelEstimate(minutes: 60, meters: 900).durationText == "1時間")
+        #expect(TravelEstimate(minutes: 65, meters: 900).durationText == "1時間5分")
+        #expect(TravelEstimate(minutes: 5, meters: 900).distanceText == "900m")
+        #expect(TravelEstimate(minutes: 5, meters: 3371).distanceText == "3.4km")
+    }
+
+    @Test func travelTimeIsCountedBeforeThePlanItLeadsTo() {
+        func plan(_ duration: Int, fixed: Int? = nil, travel: Int = 0, finished: Int? = nil) -> DaySchedule.Input {
+            DaySchedule.Input(
+                id: UUID(), durationMinutes: duration, fixedStartMinutes: fixed,
+                finishedAtMinutes: finished, travelBeforeMinutes: travel
+            )
+        }
+        let plain = DaySchedule(dayStartMinutes: 540, plans: [plan(60), plan(60, travel: 15), plan(30, travel: 10)])
+        #expect(plain.slots.map(\.startMinutes) == [540, 615, 685])
+        let fixed = DaySchedule(dayStartMinutes: 540, plans: [plan(60), plan(60, fixed: 660, travel: 15), plan(30)])
+        #expect(fixed.slots.map(\.startMinutes) == [540, 660, 720])
+        let done = DaySchedule(dayStartMinutes: 540, plans: [plan(60, finished: 580), plan(60, travel: 15)])
+        #expect(done.slots.map(\.startMinutes) == [540, 595])
+        let first = DaySchedule(dayStartMinutes: 540, plans: [plan(60, travel: 20)])
+        #expect(first.slots.map(\.startMinutes) == [560])
+    }
+
+    @Test func aTripAsksForTheTravelBetweenNeighbours() throws {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "東京旅行", isNameAuto: true, destinations: [], dates: .days(1))
+        context.insert(trip)
+        let plans = (0..<3).map { index in
+            let item = ItineraryItem(title: "P\(index)", day: 1, order: index, kind: .nameOnly)
+            context.insert(item)
+            item.trip = trip
+            return item
+        }
+        var asked: [String] = []
+        let schedule = trip.schedule(of: plans, travelMinutes: { origin, destination in
+            asked.append("\(origin.title)>\(destination.title)")
+            return 10
+        })
+        #expect(asked == ["P0>P1", "P1>P2"])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 610, 680])
+    }
+
+    @Test func aDeletedPlanKeepsItsTravelModeWhenBroughtBack() {
+        let item = place("東京駅", 35.6812, 139.7671)
+        item.travelMode = .driving
+        #expect(ItineraryItem.restored(from: item.snapshot()).travelMode == .driving)
+        item.travelMode = nil
+        #expect(ItineraryItem.restored(from: item.snapshot()).travelMode == nil)
+    }
+}

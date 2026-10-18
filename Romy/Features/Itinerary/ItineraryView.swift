@@ -18,6 +18,8 @@ struct ItineraryView<Bar: View>: View {
     let onAdd: (Int?) -> Void
     /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
     let onToggleDone: (ItineraryItem) -> Void
+    /// The travel times between plans (MapKit), kept while the app runs.
+    let travel: TravelTimes
     /// Deletes a plan; the shell offers 「元に戻す」.
     let onDelete: (ItineraryItem) -> Void
     /// The shell's note (済み, 削除), shown over a plan's detail, where the menu bar is not.
@@ -149,8 +151,10 @@ struct ItineraryView<Bar: View>: View {
         let dayCount = ItineraryDays.count(of: trip.dates)
         let day = ItineraryDays.placement(of: item.day, dayCount: dayCount)
         let plans = trip.items(on: day)
-        let slot = day == nil
-            ? nil : trip.schedule(of: plans, on: days.date(of: day), calendar: text.calendar).slot(for: item.id)
+        let slot = day == nil ? nil : trip.schedule(
+            of: plans, on: days.date(of: day), calendar: text.calendar,
+            travelMinutes: { travel.minutes(from: $0, to: $1) }
+        ).slot(for: item.id)
         return PlanDetailView(
             item: item,
             number: (plans.firstIndex { $0.id == item.id } ?? 0) + 1,
@@ -188,8 +192,9 @@ struct ItineraryView<Bar: View>: View {
     /// 経路 opens Apple Maps from the plan before (Plan) or from where the person is (Action).
     private func openRoute(to item: ItineraryItem) {
         guard let destination = RouteLink.mapItem(item) else { return }
-        let origin = trip.routeOrigin(for: item, isAction: isAction).flatMap { RouteLink.mapItem($0) }
-        RouteLink.open(to: destination, from: origin)
+        let before = trip.routeOrigin(for: item, isAction: isAction)
+        let mode = before.flatMap { TravelTimes.move(from: $0, to: item)?.mode }
+        RouteLink.open(to: destination, from: before.flatMap { RouteLink.mapItem($0) }, mode: mode)
     }
 
     // MARK: - Header and tabs
@@ -318,62 +323,14 @@ extension ItineraryView {
         }
     }
 
-    /// The cards of a day. The dot of 今 follows the clock, so the list is drawn again every 30 seconds.
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            cardList(items, day: day, now: context.date)
-        }
-    }
-
-    private func cardList(_ items: [ItineraryItem], day: Int?, now: Date) -> some View {
-        // 未定 has no order of visits, so no times; a day shows them (Notion 02 §6-5).
-        let schedule = day == nil ? nil : trip.schedule(of: items, on: days.date(of: day), calendar: text.calendar)
-        let nowMinutes = Trip.minutes(of: now, on: now, calendar: text.calendar) ?? 0
-        // 済み marks only in Action, and only on days (未定 has no order of visits).
-        let progress = isAction && day != nil
-            ? DayProgress(
-                plans: items.map { DayProgress.Input(id: $0.id, isDone: $0.doneAt != nil) },
-                isToday: day == todayNumber
-            )
-            : nil
-        let paintsLine = progress != nil && day == todayNumber
-        let color = Theme.dayColor(day)
-        /// The line of one plan: painted up to 今 in Action's today, grey otherwise, none in 未定.
-        func lineStyle(of item: ItineraryItem) -> TimeLineStyle? {
-            guard day != nil else { return nil }
-            guard paintsLine, let progress else { return .gray }
-            let fraction = schedule?.slot(for: item.id)?.progress(at: nowMinutes) ?? 0
-            return TimeLineStyle(progress.state(of: item.id), color: color, fraction: fraction)
-        }
-        return VStack(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 {
-                    RouteRow(
-                        origin: items[index - 1], destination: item, isOnADay: day != nil,
-                        line: lineStyle(of: items[index - 1])?.forMove,
-                        highlight: paintsLine && progress?.state(of: items[index - 1].id) == .now ? color : nil
-                    )
-                }
-                let slot = schedule?.slot(for: item.id)
-                ItineraryRow(
-                    item: item, number: index + 1, color: color,
-                    isHighlighted: item.id == highlighted, slot: slot,
-                    progress: progress?.state(of: item.id), line: lineStyle(of: item),
-                    onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } },
-                    onToggleDone: { onToggleDone(item) }
-                )
-                .onTapGesture { openDetail(item) }
-                // Long press lifts the card; dropping it on another plan puts it in that plan's place.
-                .draggable(item.id.uuidString)
-                .dropDestination(for: String.self) { ids, _ in
-                    guard let id = ids.first, let dragged = trip.items.first(where: { $0.id.uuidString == id }) else {
-                        return false
-                    }
-                    withAnimation(.snappy) { trip.reorder(dragged, onto: item) }
-                    return true
-                }
-            }
-        }
+        DayCardList(
+            trip: trip, items: items, day: day, days: days, isAction: isAction, todayNumber: todayNumber,
+            highlighted: highlighted, travel: travel, calendar: text.calendar,
+            onEditTime: { editingTime = EditingTime(item: $0, slot: $1) },
+            onToggleDone: onToggleDone,
+            onOpen: openDetail
+        )
     }
 
     /// Empty day: a dashed box that opens adding with this day already chosen (Notion 02 §6-6, 案A).

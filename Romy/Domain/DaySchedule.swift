@@ -5,7 +5,8 @@ import Foundation
 /// A fixed start (鍵) stays where the person put it, and the plans after it follow.
 /// A plan marked 済み moves the guess of the plans after it to the time it was marked, so they are counted
 /// again from now (Notion 02 §6-5 「目安の時刻は済みになるたびに今の時刻から計算し直す」).
-/// Travel time between plans is not counted yet; it comes with the travel rows (Notion 05).
+/// The travel time to a plan from the one before it is counted before its start (Notion 02 §6-5 ③); a fixed
+/// start does not move, and being late for it gives no warning.
 struct DaySchedule {
     struct Slot: Equatable {
         let id: UUID
@@ -28,6 +29,8 @@ struct DaySchedule {
         let fixedStartMinutes: Int?
         /// When the plan was marked 済み that day, in minutes after midnight; the plans after it count from here.
         var finishedAtMinutes: Int?
+        /// Minutes of travel from the plan before; 0 for the first plan and while the time is not known.
+        var travelBeforeMinutes = 0
     }
 
     let slots: [Slot]
@@ -35,7 +38,7 @@ struct DaySchedule {
     init(dayStartMinutes: Int, plans: [Input]) {
         var cursor = dayStartMinutes
         slots = plans.map { plan in
-            let start = plan.fixedStartMinutes ?? cursor
+            let start = plan.fixedStartMinutes ?? (cursor + plan.travelBeforeMinutes)
             let end = start + max(plan.durationMinutes, 5)
             cursor = plan.finishedAtMinutes ?? end
             return Slot(id: plan.id, startMinutes: start, endMinutes: end, isFixed: plan.fixedStartMinutes != nil)
@@ -56,13 +59,18 @@ struct DaySchedule {
 extension Trip {
     /// The times of one day's plans, counted from the trip's 1日の始まり. With the day's date, the time a plan
     /// was marked 済み that day counts as when it ended; a mark made on another date is not used.
-    func schedule(of plans: [ItineraryItem], on dayDate: Date? = nil, calendar: Calendar = .current) -> DaySchedule {
+    /// `travelMinutes` gives the minutes of travel from one plan to the next.
+    func schedule(
+        of plans: [ItineraryItem], on dayDate: Date? = nil, calendar: Calendar = .current,
+        travelMinutes: (ItineraryItem, ItineraryItem) -> Int = { _, _ in 0 }
+    ) -> DaySchedule {
         DaySchedule(
             dayStartMinutes: dayStartMinutes,
-            plans: plans.map {
+            plans: plans.enumerated().map { index, plan in
                 DaySchedule.Input(
-                    id: $0.id, durationMinutes: $0.durationMinutes, fixedStartMinutes: $0.fixedStartMinutes,
-                    finishedAtMinutes: Self.minutes(of: $0.doneAt, on: dayDate, calendar: calendar)
+                    id: plan.id, durationMinutes: plan.durationMinutes, fixedStartMinutes: plan.fixedStartMinutes,
+                    finishedAtMinutes: Self.minutes(of: plan.doneAt, on: dayDate, calendar: calendar),
+                    travelBeforeMinutes: index > 0 ? travelMinutes(plans[index - 1], plan) : 0
                 )
             }
         )

@@ -61,6 +61,8 @@ struct AppShell: View {
     @State private var sheet: AddSheet?
     @State private var note: ShellNote?
     @State private var highlighted: UUID?
+    /// Travel times between plans; kept here so they stay when the tab changes.
+    @State private var travel = TravelTimes()
 
     /// 旅程の日のタブからはその日、それ以外は未定 (Notion 02 §6-6 「入れる日」). Action's 「今日」 comes with the Action Home.
     private var dayForNewPlan: Int? {
@@ -90,6 +92,7 @@ struct AppShell: View {
                         onCreateTrip: createTripFromItinerary,
                         onAdd: { sheet = .plan(day: $0) },
                         onToggleDone: toggleDone,
+                        travel: travel,
                         onDelete: delete,
                         note: note,
                         onUndo: undo,
