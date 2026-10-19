@@ -96,6 +96,7 @@ struct AppShell: View {
             other: { otherTab($0) },
             background: { cover($0) }
         )
+        .environment(location)
         .onChange(of: tab) { _, new in if new == .itinerary || new == .wishlist { location.start() } }
         .task(id: note?.id) {
             guard note != nil else { return }

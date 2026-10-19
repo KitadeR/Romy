@@ -49,6 +49,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     @State var isAddingDestinations = false
     @State private var editingTime: EditingTime?
     @State private var moving: ItineraryItem?
+    @State var proposing: ActionOpportunity?
     /// The plan whose detail is open (Notion 02 §6-6); nil shows the itinerary.
     @State var detailID: UUID?
 
@@ -70,12 +71,12 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
 
     private static var middle: PresentationDetent { SheetHeights.middle }
 
-    private let text = DateText(calendar: .current, holidays: .bundled)
+    let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
-    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
+    var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
     /// The day of the trip that today is; 今 and スキップ exist only there.
-    private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
+    var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
     var detailItem: ItineraryItem? {
         detailID.flatMap { id in trip.items.first { $0.id == id } }
     }
@@ -144,6 +145,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             MoveSheet(trip: trip, item: item)
                 .presentationDetents([.large])
         }
+        .actionProposalSheet($proposing)
         .sheet(item: $editingTime) { editing in
             TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
                 editing.item.durationMinutes = duration
@@ -188,10 +190,11 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
         let dayCount = ItineraryDays.count(of: trip.dates)
         let day = ItineraryDays.placement(of: item.day, dayCount: dayCount)
         let plans = trip.items(on: day)
-        let slot = day == nil ? nil : trip.schedule(
+        let schedule = day == nil ? nil : trip.schedule(
             of: plans, on: days.date(of: day), calendar: text.calendar,
             travelMinutes: { travel.minutes(from: $0, to: $1) }
-        ).slot(for: item.id)
+        )
+        let slot = schedule?.slot(for: item.id)
         return PlanDetailView(
             item: item,
             number: (plans.firstIndex { $0.id == item.id } ?? 0) + 1,
@@ -206,6 +209,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             onMove: { moving = item },
             onSendToUndecided: { withAnimation(.snappy) { trip.move(item, toDay: nil) } },
             onRoute: { openRoute(to: item) },
+            onSuggest: suggestion(for: item, day: day, plans: plans, schedule: schedule),
             onToggleDone: { onToggleDone(item) },
             onDelete: {
                 detailID = nil

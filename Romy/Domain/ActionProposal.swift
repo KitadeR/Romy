@@ -106,9 +106,10 @@ enum WalkLimit {
 
     /// One way, from where the person is: a quarter of the time there is, at most 15 minutes, halved when the
     /// person said they do not want to walk (provisional, 2026-10-19).
-    static func oneWayMinutes(availableMinutes: Int, walkLess: Bool) -> Int {
+    /// `widerBy` is what 「もう少し遠くも」 adds, in minutes; it may go past the cap, since the person asked.
+    static func oneWayMinutes(availableMinutes: Int, walkLess: Bool, widerBy: Int = 0) -> Int {
         let base = min(max(availableMinutes, 0) / 4, capMinutes)
-        return walkLess ? base / 2 : base
+        return (walkLess ? base / 2 : base) + max(widerBy, 0)
     }
 
     static func meters(minutes: Int) -> Double { Double(minutes) * metersPerMinute }

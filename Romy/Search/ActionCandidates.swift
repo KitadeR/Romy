@@ -9,7 +9,8 @@ enum MapKitActionSearch {
         "park": .park, "beach": .beach
     ]
 
-    static func search(_ query: CandidateQuery) async -> [ProposalPlace] {
+    /// Places for a query. Finding nothing is an empty list; not being able to ask (no network) throws.
+    static func search(_ query: CandidateQuery) async throws -> [ProposalPlace] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query.text
         request.resultTypes = .pointOfInterest
@@ -22,8 +23,11 @@ enum MapKitActionSearch {
             center: CLLocationCoordinate2D(latitude: query.center.latitude, longitude: query.center.longitude),
             span: MKCoordinateSpan(latitudeDelta: query.spanDegrees, longitudeDelta: query.spanDegrees)
         )
-        let items = (try? await MKLocalSearch(request: request).start().mapItems) ?? []
-        return items.compactMap(place(from:))
+        do {
+            return try await MKLocalSearch(request: request).start().mapItems.compactMap(place(from:))
+        } catch let error as MKError where error.code == .placemarkNotFound {
+            return []
+        }
     }
 
     static func place(from item: MKMapItem) -> ProposalPlace? {

@@ -177,3 +177,60 @@ struct ActionProposalTests {
         #expect(!ProposalPlace.sameName("パン屋A", "海の家"))
     }
 }
+
+@MainActor
+struct ActionIntakeTests {
+    @Test func knownWordsBecomeChipsWithAKindOfPlace() {
+        guard case .chip(let bread)? = ActionIntake.parse("パンを買う") else {
+            Issue.record("not a chip")
+            return
+        }
+        #expect(bread.category == "bakery")
+        #expect(bread.activity == .buy)
+        #expect(bread.text == "パンを買う")
+    }
+
+    @Test func notWantingToWalkIsAConditionNotAChip() {
+        let walkLess = ProposalCondition(text: "歩くのは少なめ", kind: .walkLess)
+        #expect(ActionIntake.parse("あまり歩きたくない") == .condition(walkLess))
+    }
+
+    @Test func anythingElseIsSearchedAsWritten() {
+        #expect(ActionIntake.parse("  神社  ") == .chip(ProposalChip(text: "神社")))
+        #expect(ActionIntake.parse("   ") == nil)
+    }
+
+    @Test func widerSearchAddsMinutesPastTheCap() {
+        #expect(WalkLimit.oneWayMinutes(availableMinutes: 120, walkLess: false, widerBy: 5) == 20)
+    }
+
+    @Test func aMapThatCannotBeAskedIsNotTheSameAsNothingFound() async {
+        struct Offline: Error {}
+        let origin = ProposalPlace(name: "いま", latitude: 35.0, longitude: 135.0)
+        let next = ProposalPlace(name: "次", latitude: 35.0, longitude: 135.01)
+        let outcome = await ActionProposal.build(
+            chips: [ProposalChip(text: "パン", category: "bakery")], conditions: [],
+            gap: ActionGap(origin: origin, next: next, availableMinutes: 120),
+            search: { _ in throw Offline() }, walking: { _, _ in 5 }
+        )
+        #expect(outcome.chipsFailed.count == 1)
+        #expect(outcome.chipsWithoutPlaces.isEmpty)
+        #expect(outcome.isEmpty)
+    }
+
+    @Test func theOpportunityIsTheNextPlanWithAPlace() {
+        let now = ItineraryItem(title: "いま", day: 1, order: 0, kind: .sight, latitude: 35.0, longitude: 135.0)
+        let nameOnly = ItineraryItem(title: "名前だけ", day: 1, order: 1, kind: .other)
+        let next = ItineraryItem(title: "次", day: 1, order: 2, kind: .sight, latitude: 35.0, longitude: 135.01)
+        next.fixedStartMinutes = 15 * 60
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: [now, nameOnly, next].map {
+            DaySchedule.Input(id: $0.id, durationMinutes: 30, fixedStartMinutes: $0.fixedStartMinutes)
+        })
+        let plans = [now, nameOnly, next]
+        let found = ActionOpportunity.make(after: now, in: plans, schedule: schedule, nowMinutes: 13 * 60)
+        #expect(found?.nextTitle == "次")
+        #expect(found?.availableMinutes == 120)
+        #expect(found?.nextIsFixed == true)
+        #expect(ActionOpportunity.make(after: next, in: plans, schedule: schedule, nowMinutes: 0) == nil)
+    }
+}

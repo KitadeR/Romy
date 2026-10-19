@@ -9,8 +9,9 @@ struct CandidateQuery: Equatable {
     let spanDegrees: Double
 }
 
-/// Runs one search; the places in any order.
-typealias CandidateSearch = (CandidateQuery) async -> [ProposalPlace]
+/// Runs one search; the places in any order. It throws when the map could not be asked (no network), which is
+/// not the same as finding nothing.
+typealias CandidateSearch = (CandidateQuery) async throws -> [ProposalPlace]
 
 /// Walking minutes between two places; nil when there is no answer.
 typealias WalkingTime = (ProposalPlace, ProposalPlace) async -> Int?
@@ -25,27 +26,44 @@ enum ActionCandidates {
 
     /// Places for a chip within the walking limit, nearest first. The kind of place is asked for first; when
     /// that finds nothing the words are searched for any place; when that finds nothing too, the category word
-    /// is searched alone (`retriedWith`).
+    /// is searched alone (`retriedWith`). `failed` is true when the map could not be asked; the search stops there.
+    struct Gathered {
+        let places: [ProposalPlace]
+        let retriedWith: String?
+        let failed: Bool
+    }
+
     static func gather(
         for chip: ProposalChip, near origin: ProposalPlace, radiusMeters: Double, search: CandidateSearch
-    ) async -> (places: [ProposalPlace], retriedWith: String?) {
+    ) async -> Gathered {
         let span = WalkLimit.spanDegrees(radiusMeters: radiusMeters)
         let category = categoryWords[chip.category] != nil ? chip.category : nil
+        var failed = false
 
         func run(_ text: String, _ category: String?) async -> [ProposalPlace] {
-            let found = await search(CandidateQuery(text: text, category: category, center: origin, spanDegrees: span))
-            return found.filter { origin.meters(to: $0) <= radiusMeters }
-                .sorted { origin.meters(to: $0) < origin.meters(to: $1) }
+            guard !failed else { return [] }
+            do {
+                let found = try await search(
+                    CandidateQuery(text: text, category: category, center: origin, spanDegrees: span)
+                )
+                return found.filter { origin.meters(to: $0) <= radiusMeters }
+                    .sorted { origin.meters(to: $0) < origin.meters(to: $1) }
+            } catch {
+                failed = true
+                return []
+            }
         }
 
         if let category {
             let found = await run(chip.query, category)
-            if !found.isEmpty { return (found, nil) }
+            if !found.isEmpty { return Gathered(places: found, retriedWith: nil, failed: false) }
         }
         let found = await run(chip.query, nil)
-        if !found.isEmpty { return (found, nil) }
-        guard let category, let word = categoryWords[category], word != chip.query else { return ([], nil) }
-        return (await run(word, category), word)
+        if !found.isEmpty { return Gathered(places: found, retriedWith: nil, failed: false) }
+        guard let category, let word = categoryWords[category], word != chip.query, !failed else {
+            return Gathered(places: [], retriedWith: nil, failed: failed)
+        }
+        return Gathered(places: await run(word, category), retriedWith: word, failed: failed)
     }
 }
 
@@ -82,6 +100,8 @@ struct ActionProposalOutcome: Equatable {
     let combinations: [ActionCombination]
     /// Chips whose search found nothing; the rest are still proposed.
     let chipsWithoutPlaces: [ProposalChip]
+    /// Chips the map could not be asked about (no network); the rest are still proposed (Figma 24案 04).
+    var chipsFailed: [ProposalChip] = []
     /// The words each chip was searched with when its own words found nothing.
     let retriedWith: [String: String]
 
@@ -94,26 +114,36 @@ enum ActionProposal {
 
     static func build(
         chips: [ProposalChip], conditions: [ProposalCondition], gap: ActionGap,
-        search: CandidateSearch, walking: WalkingTime
+        widerBy: Int = 0, search: CandidateSearch, walking: WalkingTime
     ) async -> ActionProposalOutcome {
         guard !chips.isEmpty else {
             return ActionProposalOutcome(combinations: [], chipsWithoutPlaces: [], retriedWith: [:])
         }
         let limit = WalkLimit.oneWayMinutes(
-            availableMinutes: gap.availableMinutes, walkLess: conditions.contains { $0.kind == .walkLess }
+            availableMinutes: gap.availableMinutes, walkLess: conditions.contains { $0.kind == .walkLess },
+            widerBy: widerBy
         )
         let radius = WalkLimit.meters(minutes: limit)
 
         var kept: [(chip: ProposalChip, places: [ProposalPlace])] = []
         var without: [ProposalChip] = []
+        var failedChips: [ProposalChip] = []
         var retried: [String: String] = [:]
         for chip in chips {
             let found = await ActionCandidates.gather(for: chip, near: gap.origin, radiusMeters: radius, search: search)
             if let word = found.retriedWith { retried[chip.text] = word }
-            if found.places.isEmpty { without.append(chip) } else { kept.append((chip, found.places)) }
+            if !found.places.isEmpty {
+                kept.append((chip, found.places))
+            } else if found.failed {
+                failedChips.append(chip)
+            } else {
+                without.append(chip)
+            }
         }
         guard !kept.isEmpty else {
-            return ActionProposalOutcome(combinations: [], chipsWithoutPlaces: without, retriedWith: retried)
+            return ActionProposalOutcome(
+                combinations: [], chipsWithoutPlaces: without, chipsFailed: failedChips, retriedWith: retried
+            )
         }
 
         let direct = await walking(gap.origin, gap.next)
@@ -126,7 +156,9 @@ enum ActionProposal {
             ways.append(await timed(stops, gap: gap, direct: direct, walking: walking))
         }
         let ordered = ways.sorted { $0.slackMinutes > $1.slackMinutes }
-        return ActionProposalOutcome(combinations: ordered, chipsWithoutPlaces: without, retriedWith: retried)
+        return ActionProposalOutcome(
+            combinations: ordered, chipsWithoutPlaces: without, chipsFailed: failedChips, retriedWith: retried
+        )
     }
 
     /// The place of a chip that adds the least straight-line distance on the way to the next plan, and is not a
