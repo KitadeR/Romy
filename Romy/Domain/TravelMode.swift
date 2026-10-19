@@ -77,10 +77,7 @@ struct TravelEstimate: Equatable {
     }
 
     /// 「12分」「1時間」「1時間5分」.
-    var durationText: String {
-        guard minutes >= 60 else { return "\(minutes)分" }
-        return minutes % 60 == 0 ? "\(minutes / 60)時間" : "\(minutes / 60)時間\(minutes % 60)分"
-    }
+    var durationText: String { DurationText.text(minutes: minutes) }
 
     /// 「900m」「3.4km」.
     var distanceText: String {

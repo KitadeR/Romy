@@ -33,13 +33,11 @@ struct ItineraryCard: View {
                     .font(Theme.jp(isNow ? 17 : isDone ? 14 : 16, .bold))
                     .foregroundStyle(Theme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let label = item.kind.label, !isDone {
-                    Text(label)
-                        .font(Theme.jp(11, .bold))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Theme.fill))
+                if !isDone {
+                    HStack(spacing: 6) {
+                        if let label = item.kind.label { chip(label) }
+                        chip(DurationText.text(minutes: item.durationMinutes), symbol: "clock")
+                    }
                 }
             }
             mark
@@ -52,6 +50,18 @@ struct ItineraryCard: View {
         .opacity(progress == .skipped ? 0.5 : isDone ? 0.55 : 1)
         .animation(.easeOut(duration: 0.3), value: isHighlighted)
         .animation(.snappy, value: progress)
+    }
+
+    /// A small grey label under the name: the kind of plan, and how long it takes (Rhyme's card).
+    private func chip(_ text: String, symbol: String? = nil) -> some View {
+        HStack(spacing: 3) {
+            if let symbol { Image(systemName: symbol).font(.system(size: 9, weight: .bold)) }
+            Text(text).font(Theme.jp(11, .bold))
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Theme.fill))
     }
 
     /// The circle on 今 and the ✓ on 済み; nothing on the others (Notion 02 §6-5).
