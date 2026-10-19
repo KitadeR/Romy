@@ -4,69 +4,106 @@ import SwiftUI
 /// The map sits behind; the itinerary is Apple's sheet over it with three heights, and the map stays touchable
 /// at the small and middle heights (`presentationBackgroundInteraction`, like Apple Maps).
 /// The sheet covers the bottom of the screen, so the menu bar and ＋ are drawn inside it.
-/// The time column, reordering, moving plans and 済み come next (Notion 05).
-struct ItineraryView<Bar: View>: View {
+/// In Action (the day before the trip to its last day) today's plans get 済み marks, 今 and the painted
+/// line (Notion 02 §6-5). A plan opens its detail inside the same sheet (`PlanDetailView`).
+struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
     /// The plan just added; its card is outlined for a moment (Figma 15-9).
     let highlighted: UUID?
     /// The ＋ menu needs room above the bar, so the sheet rises to the middle height when it opens.
     let isShowingAddMenu: Bool
-    let onCreateTrip: () -> Void
+    /// True while the itinerary tab is chosen; on the other tabs the same sheet shows `other` at full height.
+    let isActive: Bool
+    /// Raised by 「新しい旅行を作る」; trip creation is presented from inside the sheet, which is always up.
+    @Binding var isCreatingTrip: Bool
     /// Opens 「行きたい所・予定を追加」 with the day it goes to (nil = 未定).
     let onAdd: (Int?) -> Void
+    /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
+    let onToggleDone: (ItineraryItem) -> Void
+    /// The travel times between plans (MapKit), kept while the app runs.
+    let travel: TravelTimes
+    /// Deletes a plan; the shell offers 「元に戻す」.
+    let onDelete: (ItineraryItem) -> Void
+    /// The shell's note (済み, 削除), shown over a plan's detail, where the menu bar is not.
+    let note: AppShell.ShellNote?
+    let onUndo: (AppShell.ShellNote) -> Void
+    /// A plan was added from 「行きたい」 (the shell offers 「元に戻す」).
+    let onWishAdded: (ItineraryItem) -> Void
     @ViewBuilder let bar: () -> Bar
+    /// What the sheet shows on the other tabs (ホーム／行きたい／準備), the heights it rests at there, and what
+    /// stands behind it where the itinerary has its map (Home's cover).
+    let otherDetents: [PresentationDetent]
+    /// Names the tab shown in `other`, so each tab comes to its own first height instead of the last one's.
+    let otherKey: String
+    @ViewBuilder let other: (HomeActions) -> Other
+    @ViewBuilder let background: (HomeActions) -> Back
 
-    @State private var isShowingTrips = false
-    @State private var isDecidingDates = false
+    @State var isShowingTrips = false
+    @State var isPickingPhoto = false
+    @State var choosingWish: WishPlace?
+    @State var routeRequest: RouteRequest?
+    @State var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
-    @State private var isAddingDestinations = false
+    @State var isAddingDestinations = false
     @State private var editingTime: EditingTime?
+    @State private var moving: ItineraryItem?
+    /// The plan whose detail is open (Notion 02 §6-6); nil shows the itinerary.
+    @State var detailID: UUID?
 
     private struct EditingTime: Identifiable {
         let item: ItineraryItem
         let slot: DaySchedule.Slot
         var id: UUID { item.id }
     }
-    @State private var isSheetPresented = true
-    @State private var detent: PresentationDetent = Self.middle
+    /// Raised without animation when the tab opens, so the sheet is there at once instead of sliding up each time.
+    @State private var isSheetPresented = false
+    /// Where the sheet's content is drawn on the screen, and the size it is laid out in. iOS 26 draws a sheet that
+    /// is not full height a little smaller and off the screen's sides; the menu bar undoes that (`barFit`).
+    @State var sheetFrame: CGRect = .zero
+    @State var sheetLayout: CGSize = .zero
+    @State var screen = ScreenMetrics()
+    @State var otherDetent = OtherDetent()
+    /// The itinerary's own height, kept while another tab holds the sheet at full height.
+    @State var itineraryDetent: PresentationDetent = Self.middle
 
-    /// Small: name, caption and tabs above the menu bar. Middle: the map keeps the top 30% (Figma 124:2).
-    private static var small: PresentationDetent { .height(300) }
-    private static var middle: PresentationDetent { .fraction(0.7) }
+    private static var middle: PresentationDetent { SheetHeights.middle }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
+    /// The day of the trip that today is; 今 and スキップ exist only there.
+    private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
+    var detailItem: ItineraryItem? {
+        detailID.flatMap { id in trip.items.first { $0.id == id } }
+    }
 
     var body: some View {
-        GeometryReader { geometry in
-            let insets = geometry.safeAreaInsets
-            let fullHeight = geometry.size.height + insets.top + insets.bottom
-            ItineraryMap(
-                trip: trip,
-                selection: selection,
-                visibleFraction: 0.3,
-                aspect: geometry.size.width / fullHeight,
-                onAddDestination: { isAddingDestinations = true }
-            )
-            .ignoresSafeArea()
+        ZStack {
+            mapLayer
+            if !isActive { background(homeActions) }
         }
+        .background(Theme.base.ignoresSafeArea())
         .sheet(isPresented: $isSheetPresented) {
             sheet
-                .presentationDetents([Self.small, Self.middle, .large], selection: $detent)
-                .presentationBackgroundInteraction(.enabled(upThrough: Self.middle))
-                .presentationDragIndicator(.visible)
+                .presentationDetents(
+                    isActive ? SheetHeights.all : Set(otherDetents), selection: detentSelection
+                )
+                .presentationBackgroundInteraction(.enabled)
+                .presentationDragIndicator(isActive || otherDetents.count > 1 ? .visible : .hidden)
                 .presentationBackground(Theme.surface)
-                .presentationCornerRadius(28)
                 .interactiveDismissDisabled()
         }
         .onChange(of: isShowingAddMenu) { _, isShowing in
-            if isShowing, detent == Self.small { withAnimation(.snappy) { detent = Self.middle } }
+            if isShowing, isActive, SheetHeights.isLow(detent) { withAnimation(.snappy) { detent = Self.middle } }
         }
         .onChange(of: trip.dates) { _, _ in keepSelectionInRange() }
-        .onAppear(perform: keepSelectionInRange)
+        .onAppear {
+            keepSelectionInRange()
+            withTransaction(.instant) { isSheetPresented = true }
+        }
     }
 
     // MARK: - Sheet
@@ -74,20 +111,27 @@ struct ItineraryView<Bar: View>: View {
     /// Everything shown inside Apple's sheet. Sheets opened from here are attached here, because a view
     /// behind a sheet cannot present another one.
     private var sheet: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-                .padding(.top, 22)
-            tabs
-            ScrollView {
-                content
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
-                    .padding(.bottom, 140)
+        Group {
+            if !isActive {
+                other(homeActions)
+            } else if let item = detailItem {
+                detail(for: item)
+            } else {
+                list
             }
-            .scrollIndicators(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .overlay { bar() }
+        // The detail has its own buttons at the bottom, so the menu bar is only drawn with the list.
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sheetFrame = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { sheetLayout = $0 }
+        .overlay(alignment: .bottom) { if showsBar { barFade } }
+        .overlay {
+            if showsBar {
+                bar()
+                    .scaleEffect(barFit.scale, anchor: .bottom)
+                    .offset(x: barFit.shiftX, y: barFit.shiftY)
+            }
+        }
         .sheet(isPresented: $isAddingDestinations) {
             AddDestinationsSheet(trip: trip)
                 .presentationDetents([.large])
@@ -95,6 +139,10 @@ struct ItineraryView<Bar: View>: View {
         .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
             AllTripsSheet(current: trip) { createAfterTrips = true }
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $moving) { item in
+            MoveSheet(trip: trip, item: item)
+                .presentationDetents([.large])
         }
         .sheet(item: $editingTime) { editing in
             TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
@@ -107,6 +155,84 @@ struct ItineraryView<Bar: View>: View {
             DecideDatesSheet(trip: trip)
                 .presentationDetents([.large])
         }
+        .tripPhotoPicker(isPresented: $isPickingPhoto, trip: trip)
+        .routeChooser($routeRequest)
+        .sheet(item: $choosingWish) { wish in
+            WishDaySheet(trip: trip, wish: wish, onAdded: onWishAdded)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isCreatingTrip) {
+            TripCreationView { trip in trip.lastOpenedAt = .now }
+                .presentationDetents([.large])
+        }
+    }
+
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+                .padding(.top, 22)
+            tabs
+            ScrollView {
+                content
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .padding(.bottom, 140)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    // MARK: - Plan detail
+
+    private func detail(for item: ItineraryItem) -> some View {
+        let dayCount = ItineraryDays.count(of: trip.dates)
+        let day = ItineraryDays.placement(of: item.day, dayCount: dayCount)
+        let plans = trip.items(on: day)
+        let slot = day == nil ? nil : trip.schedule(
+            of: plans, on: days.date(of: day), calendar: text.calendar,
+            travelMinutes: { travel.minutes(from: $0, to: $1) }
+        ).slot(for: item.id)
+        return PlanDetailView(
+            item: item,
+            number: (plans.firstIndex { $0.id == item.id } ?? 0) + 1,
+            dayCaption: day.map { days.caption(for: .day($0), hasDestination: true) } ?? "未定",
+            color: Theme.dayColor(day),
+            slot: slot,
+            canMarkDone: isAction && day != nil,
+            note: note,
+            onUndo: onUndo,
+            onClose: { withAnimation(.snappy) { detailID = nil } },
+            onEditTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } },
+            onMove: { moving = item },
+            onSendToUndecided: { withAnimation(.snappy) { trip.move(item, toDay: nil) } },
+            onRoute: { openRoute(to: item) },
+            onToggleDone: { onToggleDone(item) },
+            onDelete: {
+                detailID = nil
+                onDelete(item)
+            }
+        )
+    }
+
+    /// Opens a plan's detail; it needs room, so a small sheet rises to the middle height.
+    private func openDetail(_ item: ItineraryItem) {
+        // The map has to stay in view: from the small or the large height the detail comes to the middle.
+        withAnimation(.snappy) {
+            detailID = item.id
+            detent = Self.middle
+        }
+    }
+
+    func openDetail(id: UUID) {
+        if let item = trip.items.first(where: { $0.id == id }) { openDetail(item) }
+    }
+
+    /// 経路 opens the route (Apple Maps or Google Maps) from the plan before (Plan) or from where the person is (Action).
+    private func openRoute(to item: ItineraryItem) {
+        let before = trip.routeOrigin(for: item, isAction: isAction)
+        let mode = before.flatMap { TravelTimes.move(from: $0, to: item)?.mode }
+        guard let request = RouteRequest.route(to: item, from: before, mode: mode) else { return }
+        RouteLink.start(request, chooser: $routeRequest)
     }
 
     // MARK: - Header and tabs
@@ -174,6 +300,9 @@ struct ItineraryView<Bar: View>: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+}
+
+extension ItineraryView {
     // MARK: - Content
 
     @ViewBuilder
@@ -233,44 +362,18 @@ struct ItineraryView<Bar: View>: View {
     }
 
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
-        // 未定 has no order of visits, so no times; a day shows them (Notion 02 §6-5).
-        let schedule = day == nil ? nil : DaySchedule(
-            dayStartMinutes: trip.dayStartMinutes,
-            plans: items.map {
-                DaySchedule.Input(
-                    id: $0.id, durationMinutes: $0.durationMinutes, fixedStartMinutes: $0.fixedStartMinutes
-                )
-            }
+        DayCardList(
+            trip: trip, items: items, day: day, days: days, isAction: isAction, todayNumber: todayNumber,
+            highlighted: highlighted, travel: travel, calendar: text.calendar,
+            onEditTime: { editingTime = EditingTime(item: $0, slot: $1) },
+            onToggleDone: onToggleDone,
+            onOpen: openDetail
         )
-        return VStack(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 {
-                    RouteRow(origin: items[index - 1], destination: item, isOnADay: day != nil)
-                }
-                let slot = schedule?.slot(for: item.id)
-                ItineraryRow(
-                    item: item, number: index + 1, color: Theme.dayColor(day),
-                    isHighlighted: item.id == highlighted, slot: slot,
-                    onTapTime: { if let slot { editingTime = EditingTime(item: item, slot: slot) } }
-                )
-            }
-        }
     }
 
     /// Empty day: a dashed box that opens adding with this day already chosen (Notion 02 §6-6, 案A).
     private func addBox(_ title: String, day: Int?) -> some View {
-        Button { onAdd(day) } label: {
-            Label(title, systemImage: "plus")
-                .font(Theme.jp(14, .bold))
-                .foregroundStyle(Theme.ink)
-                .frame(maxWidth: .infinity, minHeight: 64)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Theme.faint, style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        DashedAddBox(title: title) { onAdd(day) }
     }
 
     // MARK: - Helpers
@@ -285,46 +388,6 @@ struct ItineraryView<Bar: View>: View {
     private func openCreationIfAsked() {
         guard createAfterTrips else { return }
         createAfterTrips = false
-        onCreateTrip()
-    }
-}
-
-/// A plan card: number in the day's color, name, and the kind (Figma 124:2).
-/// Opening the plan's detail sheet comes with the detail sheet (Notion 05).
-struct ItineraryCard: View {
-    let item: ItineraryItem
-    let number: Int
-    let color: Color
-    let isHighlighted: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(Theme.latin(12, .bold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(color))
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.title)
-                    .font(Theme.jp(16, .bold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let label = item.kind.label {
-                    Text(label)
-                        .font(Theme.jp(11, .bold))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Theme.fill))
-                }
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(isHighlighted ? Theme.ink : Theme.line, lineWidth: isHighlighted ? 2 : 1)
-        )
-        .animation(.easeOut(duration: 0.3), value: isHighlighted)
+        isCreatingTrip = true
     }
 }

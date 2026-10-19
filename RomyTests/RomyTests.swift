@@ -8,6 +8,7 @@
 import Foundation
 import MapKit
 import SwiftData
+import SwiftUI
 import Testing
 @testable import Romy
 
@@ -422,7 +423,7 @@ struct PlaceSearchTests {
 struct TripItemsTests {
     private func makeTrip(_ dates: TripDates) throws -> (ModelContext, Trip) {
         let container = try ModelContainer(
-            for: Trip.self, ItineraryItem.self,
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
@@ -454,6 +455,37 @@ struct TripItemsTests {
         trip.dates = .range(start: .now, end: Calendar.current.date(byAdding: .day, value: 2, to: .now)!)
         trip.moveItemsPastLastDay()
         #expect(trip.items(on: 2).map(\.title) == ["清水寺"])
+    }
+
+    @Test func movingGoesToTheEndOfTheOtherDay() throws {
+        let (context, trip) = try makeTrip(.days(2))
+        add("A", day: 1, to: trip, in: context)
+        add("B", day: 1, to: trip, in: context)
+        add("C", day: 2, to: trip, in: context)
+        let a = try #require(trip.items.first { $0.title == "A" })
+        trip.move(a, toDay: 2)
+        #expect(trip.items(on: 1).map(\.title) == ["B"])
+        #expect(trip.items(on: 2).map(\.title) == ["C", "A"])
+        trip.move(a, toDay: nil)
+        #expect(trip.items(on: nil).map(\.title) == ["A"])
+        #expect(trip.items(on: 2).map(\.title) == ["C"])
+    }
+
+    @Test func droppingOnAPlanTakesItsPlace() throws {
+        let (context, trip) = try makeTrip(.days(2))
+        for title in ["A", "B", "C"] { add(title, day: 1, to: trip, in: context) }
+        add("D", day: 2, to: trip, in: context)
+        let (a, c, d) = (
+            try #require(trip.items.first { $0.title == "A" }),
+            try #require(trip.items.first { $0.title == "C" }),
+            try #require(trip.items.first { $0.title == "D" })
+        )
+        trip.reorder(a, onto: c)
+        #expect(trip.items(on: 1).map(\.title) == ["B", "C", "A"])
+        trip.reorder(d, onto: trip.items(on: 1)[0])
+        #expect(trip.items(on: 1).first?.title == "D")
+        #expect(trip.items(on: 2).isEmpty)
+        #expect(trip.items(on: 1).map(\.order) == [0, 1, 2, 3])
     }
 
     @Test func plansPastTheLastDayMoveToUndecided() throws {
@@ -540,5 +572,598 @@ struct DayScheduleTests {
     @Test func clockPastMidnightKeepsCounting() {
         #expect(DaySchedule.clock(540) == "9:00")
         #expect(DaySchedule.clock(25 * 60 + 5) == "25:05")
+    }
+}
+
+struct DayProgressTests {
+    private func plans(_ done: [Bool]) -> [DayProgress.Input] {
+        done.map { DayProgress.Input(id: UUID(), isDone: $0) }
+    }
+
+    private func states(_ inputs: [DayProgress.Input], isToday: Bool = true) -> [DayProgress.State] {
+        let progress = DayProgress(plans: inputs, isToday: isToday)
+        return inputs.map { progress.state(of: $0.id) }
+    }
+
+    @Test func firstPlanIsNowWhenNothingIsDone() {
+        #expect(states(plans([false, false, false])) == [.now, .upcoming, .upcoming])
+    }
+
+    @Test func nowIsTheNextAfterTheLastDone() {
+        #expect(states(plans([true, true, false, false])) == [.done, .done, .now, .upcoming])
+    }
+
+    @Test func notDoneBeforeTheLastDoneIsSkipped() {
+        #expect(states(plans([true, false, true, false])) == [.done, .skipped, .done, .now])
+    }
+
+    @Test func unmarkingAnEarlierPlanSkipsItAndNowStays() {
+        // Everything but the last plan was done; the first is un-marked.
+        #expect(states(plans([false, true, true, false])) == [.skipped, .done, .done, .now])
+    }
+
+    @Test func unmarkingTheLastDoneMakesItNowAgain() {
+        #expect(states(plans([true, true, false])) == [.done, .done, .now])
+        #expect(states(plans([true, false, false])) == [.done, .now, .upcoming])
+    }
+
+    @Test func nothingIsNowWhenEverythingIsDone() {
+        #expect(states(plans([true, true])) == [.done, .done])
+    }
+
+    @Test func otherDaysKeepDoneMarksButHaveNoNowOrSkip() {
+        #expect(states(plans([true, false, true, false]), isToday: false) == [.done, .upcoming, .done, .upcoming])
+    }
+
+    @Test func emptyDayHasNoStates() {
+        #expect(states([]).isEmpty)
+    }
+}
+
+struct TripPhaseTests {
+    private let dates = TripDates.range(start: day(2026, 11, 9), end: day(2026, 11, 11))
+
+    private func phase(_ dates: TripDates, on today: Date) -> TripPhase {
+        TripPhase(dates: dates, today: today, calendar: tokyo)
+    }
+
+    @Test func planUntilTwoDaysBefore() {
+        #expect(phase(dates, on: day(2026, 11, 7)) == .plan)
+    }
+
+    @Test func actionStartsTheDayBefore() {
+        #expect(phase(dates, on: day(2026, 11, 8)) == .action)
+        #expect(phase(dates, on: day(2026, 11, 9)) == .action)
+        #expect(phase(dates, on: day(2026, 11, 11)) == .action)
+    }
+
+    @Test func memoriesAfterTheLastDay() {
+        #expect(phase(dates, on: day(2026, 11, 12)) == .memories)
+    }
+
+    @Test func tripsWithoutFixedDatesStayInPlan() {
+        #expect(phase(.undecided, on: day(2026, 11, 9)) == .plan)
+        #expect(phase(.days(3), on: day(2026, 11, 9)) == .plan)
+    }
+
+    @Test func dayNumberFollowsTheDates() {
+        #expect(dates.dayNumber(on: day(2026, 11, 8), calendar: tokyo) == nil)
+        #expect(dates.dayNumber(on: day(2026, 11, 9), calendar: tokyo) == 1)
+        #expect(dates.dayNumber(on: day(2026, 11, 11), calendar: tokyo) == 3)
+        #expect(dates.dayNumber(on: day(2026, 11, 12), calendar: tokyo) == nil)
+        #expect(TripDates.days(3).dayNumber(on: day(2026, 11, 9), calendar: tokyo) == nil)
+    }
+}
+
+struct PlaceSearchSuggestionTests {
+    private func place(
+        _ name: String, category: MKPointOfInterestCategory? = nil, lat: Double = 35.68
+    ) -> PlaceSearch.Result {
+        let item = MKMapItem(location: CLLocation(latitude: lat, longitude: 139.76), address: nil)
+        item.name = name
+        item.pointOfInterestCategory = category
+        return PlaceSearch.result(from: item)!
+    }
+
+    private func suggestion(_ title: String, town: String? = "千代田区") -> PlaceSearch.Result {
+        PlaceSearch.Result(
+            id: "suggestion:\(title)", title: title, category: "場所", kind: .other,
+            town: town, item: nil, completion: nil
+        )
+    }
+
+    @Test func suggestionsComeFirstThenTheFoundPlaces() {
+        let merged = PlaceSearch.merge(
+            suggestions: [suggestion("東京駅"), suggestion("東京タワー", town: "港区")],
+            found: [place("東京都")]
+        )
+        #expect(merged.map(\.title) == ["東京駅", "東京タワー", "東京都"])
+        #expect(merged.map { $0.item == nil } == [true, true, false])
+    }
+
+    @Test func aFoundPlaceTakesTheSpotOfItsSuggestion() {
+        let tower = place("東京タワー", category: .landmark)
+        let merged = PlaceSearch.merge(
+            suggestions: [suggestion("東京駅"), suggestion("東京タワー", town: "港区")],
+            found: [tower]
+        )
+        #expect(merged.map(\.title) == ["東京駅", "東京タワー"])
+        #expect(merged[1].id == tower.id)
+        #expect(merged[1].item != nil)
+        #expect(merged[1].category == "名所")
+    }
+
+    @Test func theSameSuggestionIsShownOnce() {
+        let merged = PlaceSearch.merge(suggestions: [suggestion("東京駅"), suggestion("東京駅")], found: [])
+        #expect(merged.count == 1)
+    }
+
+    @Test func mergeKeepsAtMostTheLimit() {
+        let suggestions = (0..<12).map { suggestion("場所\($0)", town: "区\($0)") }
+        let found = (0..<12).map { place("店\($0)", lat: 35 + Double($0) / 10) }
+        #expect(PlaceSearch.merge(suggestions: suggestions, found: found, limit: 15).count == 15)
+    }
+
+    @Test func areaCenterIsTheAreaNotAPlace() throws {
+        let area = place("東京都", lat: 35.69)
+        let station = place("東京駅", category: .landmark, lat: 35.68)
+        let center = try #require(PlaceSearch.areaCenter(in: [station, area], matching: "東京"))
+        #expect(abs(center.latitude - 35.69) < 0.0001)
+        #expect(PlaceSearch.areaCenter(in: [station], matching: "東京") == nil)
+        #expect(PlaceSearch.areaCenter(in: [area], matching: "大阪") == nil)
+    }
+
+    @Test func areaRegionIsCenteredOnTheArea() {
+        let region = PlaceSearch.areaRegion(around: CLLocationCoordinate2D(latitude: 35.69, longitude: 139.69))
+        #expect(region.center.latitude == 35.69)
+        #expect(region.span.latitudeDelta == 0.5)
+    }
+
+    @Test func suggestionDetailShowsItsTown() {
+        #expect(suggestion("東京駅").detail == "場所 ・ 千代田区")
+        #expect(suggestion("東京駅", town: nil).detail == "場所")
+    }
+}
+
+struct AreaSearchOrderTests {
+    private func sight(_ title: String) -> AreaSearch.Result {
+        AreaSearch.Result(title: title, detail: "", kind: .landmark, completion: nil, item: nil)
+    }
+
+    @Test func nameMatchesComeBeforeLooseOnes() {
+        let sights = ["東京ディズニーシー", "東京ドイツ村", "東京ドームシティ", "東京サマーランド", "東京ジョイポリス", "東京駅"]
+            .map(sight)
+        let ordered = AreaSearch.nameMatchesFirst(sights, query: "東京駅")
+        #expect(ordered.map(\.title) == ["東京駅", "東京ディズニーシー", "東京ドイツ村", "東京ドームシティ", "東京サマーランド"])
+    }
+
+    @Test func orderIsKeptWithinEachGroup() {
+        let sights = ["B公園", "Aランド", "Cランド", "Dパーク"].map(sight)
+        let ordered = AreaSearch.nameMatchesFirst(sights, query: "ランド")
+        #expect(ordered.map(\.title) == ["Aランド", "Cランド", "B公園", "Dパーク"])
+    }
+
+    @Test func kanaAndWidthAreIgnoredWhenMatching() {
+        let sights = ["東京ドーム", "東京ディズニーランド"].map(sight)
+        #expect(AreaSearch.nameMatchesFirst(sights, query: "でぃずにー").map(\.title)
+            == ["東京ディズニーランド", "東京ドーム"])
+    }
+
+    @Test func atMostTheLimitIsKept() {
+        let sights = (0..<10).map { sight("場所\($0)") }
+        #expect(AreaSearch.nameMatchesFirst(sights, query: "場所").count == 5)
+        #expect(AreaSearch.nameMatchesFirst([], query: "東京").isEmpty)
+    }
+}
+
+struct PlanDetailTests {
+    private func makeTrip(_ dates: TripDates = .days(2)) throws -> (ModelContext, Trip) {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "京都旅行", isNameAuto: true, destinations: [], dates: dates)
+        context.insert(trip)
+        return (context, trip)
+    }
+
+    @discardableResult
+    private func add(
+        _ title: String, day: Int?, hasPlace: Bool, to trip: Trip, in context: ModelContext
+    ) -> ItineraryItem {
+        let item = ItineraryItem(
+            title: title, day: day, order: trip.nextOrder(on: day), kind: hasPlace ? .sight : .nameOnly,
+            latitude: hasPlace ? 35.0 : nil, longitude: hasPlace ? 135.7 : nil
+        )
+        context.insert(item)
+        item.trip = trip
+        return item
+    }
+
+    @Test func aDeletedPlanComesBackAsItWas() throws {
+        let (context, trip) = try makeTrip()
+        add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let middle = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        add("嵐山", day: 1, hasPlace: true, to: trip, in: context)
+        middle.durationMinutes = 90
+        middle.fixedStartMinutes = 13 * 60
+        middle.doneAt = Date(timeIntervalSince1970: 1_000)
+        middle.category = "市場"
+        middle.area = "京都市中京区"
+        let snapshot = middle.snapshot()
+
+        context.delete(middle)
+        context.processPendingChanges()
+        #expect(trip.items(on: 1).map(\.title) == ["伏見稲荷大社", "嵐山"])
+
+        let restored = ItineraryItem.restored(from: snapshot)
+        context.insert(restored)
+        restored.trip = trip
+        #expect(trip.items(on: 1).map(\.title) == ["伏見稲荷大社", "錦市場", "嵐山"])
+        #expect(restored.id == snapshot.id)
+        #expect(restored.durationMinutes == 90)
+        #expect(restored.fixedStartMinutes == 13 * 60)
+        #expect(restored.doneAt == Date(timeIntervalSince1970: 1_000))
+        #expect(restored.category == "市場")
+        #expect(restored.area == "京都市中京区")
+        #expect(restored.latitude == 35.0)
+        #expect(restored.kind == .sight)
+    }
+
+    @Test func aPlanWithoutAPlaceComesBackToo() throws {
+        let (context, trip) = try makeTrip()
+        let item = add("お昼", day: nil, hasPlace: false, to: trip, in: context)
+        let restored = ItineraryItem.restored(from: item.snapshot())
+        #expect(restored.kind == .nameOnly)
+        #expect(restored.day == nil)
+        #expect(restored.latitude == nil)
+    }
+
+    @Test func routeStartsFromThePlanBeforeInPlan() throws {
+        let (context, trip) = try makeTrip()
+        let first = add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false)?.id == first.id)
+    }
+
+    @Test func routeStartsWhereThePersonIsInActionAndForTheFirstPlan() throws {
+        let (context, trip) = try makeTrip()
+        let first = add("伏見稲荷大社", day: 1, hasPlace: true, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: true) == nil)
+        #expect(trip.routeOrigin(for: first, isAction: false) == nil)
+    }
+
+    @Test func routeStartsWhereThePersonIsWhenThePlanBeforeHasNoPlace() throws {
+        let (context, trip) = try makeTrip()
+        add("お昼", day: 1, hasPlace: false, to: trip, in: context)
+        let second = add("錦市場", day: 1, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false) == nil)
+    }
+
+    @Test func undecidedPlansHaveNoRouteOrigin() throws {
+        let (context, trip) = try makeTrip()
+        add("A", day: nil, hasPlace: true, to: trip, in: context)
+        let second = add("B", day: nil, hasPlace: true, to: trip, in: context)
+        #expect(trip.routeOrigin(for: second, isAction: false) == nil)
+    }
+
+    @Test func deletedMessageNamesThePlan() {
+        #expect(ItineraryDays.deletedMessage(title: "清水寺") == "清水寺を削除しました")
+    }
+}
+
+struct ProgressTimeTests {
+    private func plan(_ duration: Int, fixed: Int? = nil, finished: Int? = nil) -> DaySchedule.Input {
+        DaySchedule.Input(id: UUID(), durationMinutes: duration, fixedStartMinutes: fixed, finishedAtMinutes: finished)
+    }
+
+    @Test func plansAfterADoneOneCountFromWhenItWasMarked() {
+        let schedule = DaySchedule(
+            dayStartMinutes: 9 * 60,
+            plans: [plan(60, finished: 9 * 60 + 40), plan(60), plan(30)]
+        )
+        #expect(schedule.slots.map(\.startMinutes) == [540, 580, 640])
+        #expect(schedule.slots.map(\.endMinutes) == [600, 640, 670])
+    }
+
+    @Test func aPlanMarkedEarlyPullsTheNextOneForward() {
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: [plan(60, finished: 9 * 60 + 20), plan(60)])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 560])
+    }
+
+    @Test func aFixedStartDoesNotMoveWhenAnEarlierPlanIsMarked() {
+        let schedule = DaySchedule(
+            dayStartMinutes: 9 * 60,
+            plans: [plan(60, finished: 9 * 60 + 40), plan(60, fixed: 12 * 60), plan(60)]
+        )
+        #expect(schedule.slots.map(\.startMinutes) == [540, 720, 780])
+    }
+
+    @Test func plansNotMarkedKeepTheirGuess() {
+        let schedule = DaySchedule(dayStartMinutes: 9 * 60, plans: [plan(60), plan(60), plan(30)])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 600, 660])
+    }
+
+    @Test func theDotStaysInsideThePlan() {
+        let slot = DaySchedule.Slot(id: UUID(), startMinutes: 13 * 60 + 10, endMinutes: 15 * 60, isFixed: false)
+        #expect(slot.progress(at: 12 * 60) == 0)
+        #expect(abs(slot.progress(at: 14 * 60 + 20) - 70.0 / 110.0) < 0.0001)
+        #expect(slot.progress(at: 15 * 60) == 1)
+        #expect(slot.progress(at: 17 * 60) == 1)
+    }
+
+    @Test func theDotMovesBetweenTheInsetsOfTheCard() {
+        #expect(TimeLineLayout.dotY(fraction: 0, rowHeight: 100) == 17)
+        #expect(TimeLineLayout.dotY(fraction: 1, rowHeight: 100) == 83)
+        #expect(TimeLineLayout.dotY(fraction: 0.5, rowHeight: 100) == 50)
+        #expect(TimeLineLayout.dotY(fraction: 1, rowHeight: 20) == 17)
+    }
+
+    @Test func theMarkedTimeCountsOnlyOnTheDayItWasMade() throws {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "京都旅行", isNameAuto: true, destinations: [], dates: .days(2))
+        context.insert(trip)
+        let first = ItineraryItem(title: "A", day: 1, order: 0, kind: .nameOnly)
+        let second = ItineraryItem(title: "B", day: 1, order: 1, kind: .nameOnly)
+        for item in [first, second] {
+            context.insert(item)
+            item.trip = trip
+        }
+        var parts = DateComponents(year: 2026, month: 11, day: 9, hour: 9, minute: 40)
+        parts.timeZone = tokyo.timeZone
+        first.doneAt = tokyo.date(from: parts)
+
+        let sameDay = trip.schedule(of: [first, second], on: day(2026, 11, 9), calendar: tokyo)
+        #expect(sameDay.slots.map(\.startMinutes) == [540, 580])
+        let otherDay = trip.schedule(of: [first, second], on: day(2026, 11, 10), calendar: tokyo)
+        #expect(otherDay.slots.map(\.startMinutes) == [540, 600])
+        let noDate = trip.schedule(of: [first, second])
+        #expect(noDate.slots.map(\.startMinutes) == [540, 600])
+    }
+
+    @Test func nowIsDrawnLastAndDoneKeepsItsFlag() {
+        let plans = [
+            MapPin(id: UUID(), number: 1, day: 1, latitude: 35, longitude: 135, isDone: true),
+            MapPin(id: UUID(), number: 2, day: 1, latitude: 35, longitude: 135, isNow: true),
+            MapPin(id: UUID(), number: 3, day: 1, latitude: 35, longitude: 135)
+        ]
+        let ordered = ItineraryPins.drawingOrder(plans)
+        #expect(ordered.map(\.number) == [1, 3, 2])
+        #expect(ordered[0].isDone)
+    }
+}
+
+struct TimeLineStyleTests {
+    @Test func theMoveAfterNowKeepsTheLineWithoutTheDot() {
+        let style = TimeLineStyle(.now, color: .red, fraction: 0.4)
+        guard case .progress = style else {
+            Issue.record("今 should have a progress line")
+            return
+        }
+        guard case .dotted = style.forMove else {
+            Issue.record("the move after 今 should be dotted")
+            return
+        }
+    }
+
+    @Test func otherMovesKeepTheirStyle() {
+        guard case .solid = TimeLineStyle(.done, color: .red).forMove else {
+            Issue.record("a done plan's move should stay solid")
+            return
+        }
+        guard case .gray = TimeLineStyle(.upcoming, color: .red).forMove else {
+            Issue.record("an upcoming plan's move should stay grey")
+            return
+        }
+    }
+}
+
+struct TravelTimeTests {
+    private func place(_ title: String, _ lat: Double, _ lon: Double) -> ItineraryItem {
+        ItineraryItem(title: title, day: 1, order: 0, kind: .sight, latitude: lat, longitude: lon)
+    }
+
+    @Test func shortMovesStartAsWalkingAndLongOnesAsTheTrain() {
+        #expect(TravelMode.defaultMode(straightMeters: 300) == .walking)
+        #expect(TravelMode.defaultMode(straightMeters: 1500) == .walking)
+        #expect(TravelMode.defaultMode(straightMeters: 1501) == .transit)
+    }
+
+    @Test func theChosenModeWinsOverTheFirstGuess() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let shinjuku = place("新宿駅", 35.6896, 139.7006)
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .transit)
+        shinjuku.travelMode = .driving
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .driving)
+        shinjuku.travelMode = nil
+        #expect(TravelTimes.move(from: tokyo, to: shinjuku)?.mode == .transit)
+    }
+
+    @Test func aMoveNeedsAPlaceAtBothEnds() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let lunch = ItineraryItem(title: "お昼", day: 1, order: 1, kind: .nameOnly)
+        #expect(TravelTimes.move(from: tokyo, to: lunch) == nil)
+        #expect(TravelTimes.move(from: lunch, to: tokyo) == nil)
+    }
+
+    @Test func aDifferentModeOrPlaceIsADifferentMove() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        let walking = TravelTimes.move(from: tokyo, to: tower)
+        tower.travelMode = .driving
+        let driving = TravelTimes.move(from: tokyo, to: tower)
+        #expect(walking != driving)
+        tower.latitude = 35.0
+        #expect(TravelTimes.move(from: tokyo, to: tower) != driving)
+    }
+
+    @Test func theSameMoveByAnotherModeKeepsItsPlaces() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        let walking = TravelTimes.move(from: tokyo, to: tower)
+        let driving = walking?.with(mode: .driving)
+        #expect(driving?.mode == .driving)
+        #expect(driving?.fromID == walking?.fromID)
+        #expect(driving?.toLatitude == walking?.toLatitude)
+        #expect(driving != walking)
+    }
+
+    @Test func nothingIsCountedUntilApplesAnswers() {
+        let tokyo = place("東京駅", 35.6812, 139.7671)
+        let tower = place("東京タワー", 35.6586, 139.7454)
+        #expect(TravelTimes().minutes(from: tokyo, to: tower) == 0)
+        #expect(TravelTimes().estimate(for: TravelTimes.move(from: tokyo, to: tower)) == nil)
+    }
+
+    @Test func aTrainRouteFarShorterThanTheStraightLineIsNotUsed() {
+        // 東京駅→丸ビル: Apple answered 48 m for a straight line of about 380 m.
+        #expect(!TravelEstimate(minutes: 1, meters: 48).isPlausible(straightMeters: 380))
+        #expect(TravelEstimate(minutes: 13, meters: 10296).isPlausible(straightMeters: 5800))
+        #expect(TravelEstimate(minutes: 5, meters: 477).isPlausible(straightMeters: 380))
+    }
+
+    @Test func anEstimateIsWrittenInMinutesAndMeters() {
+        #expect(TravelEstimate(seconds: 300, meters: 477).durationText == "5分")
+        #expect(TravelEstimate(seconds: 20, meters: 40).minutes == 1)
+        #expect(TravelEstimate(minutes: 60, meters: 900).durationText == "1時間")
+        #expect(TravelEstimate(minutes: 65, meters: 900).durationText == "1時間5分")
+        #expect(TravelEstimate(minutes: 5, meters: 900).distanceText == "900m")
+        #expect(TravelEstimate(minutes: 5, meters: 3371).distanceText == "3.4km")
+    }
+
+    @Test func travelTimeIsCountedBeforeThePlanItLeadsTo() {
+        func plan(_ duration: Int, fixed: Int? = nil, travel: Int = 0, finished: Int? = nil) -> DaySchedule.Input {
+            DaySchedule.Input(
+                id: UUID(), durationMinutes: duration, fixedStartMinutes: fixed,
+                finishedAtMinutes: finished, travelBeforeMinutes: travel
+            )
+        }
+        let plain = DaySchedule(dayStartMinutes: 540, plans: [plan(60), plan(60, travel: 15), plan(30, travel: 10)])
+        #expect(plain.slots.map(\.startMinutes) == [540, 615, 685])
+        let fixed = DaySchedule(dayStartMinutes: 540, plans: [plan(60), plan(60, fixed: 660, travel: 15), plan(30)])
+        #expect(fixed.slots.map(\.startMinutes) == [540, 660, 720])
+        let done = DaySchedule(dayStartMinutes: 540, plans: [plan(60, finished: 580), plan(60, travel: 15)])
+        #expect(done.slots.map(\.startMinutes) == [540, 595])
+        let first = DaySchedule(dayStartMinutes: 540, plans: [plan(60, travel: 20)])
+        #expect(first.slots.map(\.startMinutes) == [560])
+    }
+
+    @Test func aTripAsksForTheTravelBetweenNeighbours() throws {
+        let container = try ModelContainer(
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let trip = Trip(name: "東京旅行", isNameAuto: true, destinations: [], dates: .days(1))
+        context.insert(trip)
+        let plans = (0..<3).map { index in
+            let item = ItineraryItem(title: "P\(index)", day: 1, order: index, kind: .nameOnly)
+            context.insert(item)
+            item.trip = trip
+            return item
+        }
+        var asked: [String] = []
+        let schedule = trip.schedule(of: plans, travelMinutes: { origin, destination in
+            asked.append("\(origin.title)>\(destination.title)")
+            return 10
+        })
+        #expect(asked == ["P0>P1", "P1>P2"])
+        #expect(schedule.slots.map(\.startMinutes) == [540, 610, 680])
+    }
+
+    @Test func aDeletedPlanKeepsItsTravelModeWhenBroughtBack() {
+        let item = place("東京駅", 35.6812, 139.7671)
+        item.travelMode = .driving
+        #expect(ItineraryItem.restored(from: item.snapshot()).travelMode == .driving)
+        item.travelMode = nil
+        #expect(ItineraryItem.restored(from: item.snapshot()).travelMode == nil)
+    }
+}
+
+struct GlassLensTests {
+    private let bar = LensTrack(count: 4, itemWidth: 80)
+
+    @Test func theLensSitsOnTheChosenTab() {
+        #expect(bar.offset(of: 0) == 0)
+        #expect(bar.offset(of: 2) == 160)
+    }
+
+    @Test func aFingerPicksTheTabUnderIt() {
+        #expect(bar.index(at: 0) == 0)
+        #expect(bar.index(at: 79.9) == 0)
+        #expect(bar.index(at: 80) == 1)
+        #expect(bar.index(at: 250) == 3)
+    }
+
+    @Test func thePlacesBeyondTheEndsHoldTheEndTabs() {
+        #expect(bar.index(at: -30) == 0)
+        #expect(bar.index(at: 5000) == 3)
+    }
+
+    @Test func theLensFollowsTheFingerWithoutLeavingTheBar() {
+        #expect(bar.followingOffset(at: 100) == 60)
+        #expect(bar.followingOffset(at: 10) == 0)
+        #expect(bar.followingOffset(at: 400) == 240)
+    }
+
+    @Test func tilesWithGapsAreMeasuredByTheirPitch() {
+        let tiles = LensTrack(count: 3, itemWidth: 78, spacing: 8)
+        #expect(tiles.offset(of: 1) == 86)
+        #expect(tiles.index(at: 90) == 1)
+        #expect(tiles.index(at: 85.9) == 0)
+        #expect(tiles.followingOffset(at: 1000) == 172)
+    }
+
+    @Test func anEmptyTrackAlwaysAnswersTheFirstChoice() {
+        #expect(LensTrack(count: 0, itemWidth: 80).index(at: 40) == 0)
+    }
+}
+
+struct TravelLoadingTests {
+    private func move() -> TravelMove {
+        let tokyo = ItineraryItem(
+            title: "東京駅", day: 1, order: 0, kind: .sight, latitude: 35.6812, longitude: 139.7671
+        )
+        let tower = ItineraryItem(
+            title: "東京タワー", day: 1, order: 1, kind: .sight, latitude: 35.6586, longitude: 139.7454
+        )
+        return TravelTimes.move(from: tokyo, to: tower)!
+    }
+
+    @Test func aMoveNotAnsweredYetIsLoading() {
+        let travel = TravelTimes()
+        let asked = move()
+        #expect(travel.isLoading(asked))
+        travel.store(.loading, for: asked)
+        #expect(travel.isLoading(asked))
+    }
+
+    @Test func anAnswerOrNoAnswerEndsTheLoading() {
+        let travel = TravelTimes()
+        let asked = move()
+        travel.store(.ready(TravelEstimate(minutes: 5, meters: 400)), for: asked)
+        #expect(!travel.isLoading(asked))
+        #expect(travel.estimate(for: asked) == TravelEstimate(minutes: 5, meters: 400))
+        travel.store(.unavailable, for: asked)
+        #expect(!travel.isLoading(asked))
+        #expect(travel.estimate(for: asked) == nil)
+    }
+
+    @Test func aCancelledAskIsForgottenSoItIsAskedAgain() {
+        let travel = TravelTimes()
+        let asked = move()
+        travel.store(.loading, for: asked)
+        travel.store(nil, for: asked)
+        #expect(travel.isLoading(asked))
+    }
+
+    @Test func noMoveIsNeverLoading() {
+        #expect(!TravelTimes().isLoading(nil))
     }
 }

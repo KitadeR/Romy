@@ -121,7 +121,15 @@ final class AreaSearch: NSObject, MKLocalSearchCompleterDelegate {
                 kind: .area, completion: $0, item: nil
             )
         }
-        return Array(sightResults.prefix(5)) + areaResults
+        return Self.nameMatchesFirst(sightResults, query: sightQuery) + areaResults
+    }
+
+    /// At most 5 sights, those whose name contains what was typed first. Apple also returns sights that only
+    /// loosely fit (「東京駅」 gives theme parks too); without this they filled all 5 and pushed 東京駅 out.
+    static func nameMatchesFirst(_ sights: [Result], query: String, limit: Int = 5) -> [Result] {
+        let matches = sights.filter { name($0.title, contains: query) }
+        let others = sights.filter { !name($0.title, contains: query) }
+        return Array((matches + others).prefix(limit))
     }
 
     func update(query: String) {

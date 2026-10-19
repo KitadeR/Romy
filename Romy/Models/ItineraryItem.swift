@@ -26,6 +26,12 @@ final class ItineraryItem {
     var durationMinutes: Int = 60
     /// Start fixed by the person (鍵), in minutes after midnight; nil while the start is a guess (目安).
     var fixedStartMinutes: Int?
+    /// When the person marked the plan 済み (Notion 02 §6-5 「済みを付ける・外す」); nil while it is not done.
+    /// 今 and スキップ are not stored; they come from the order of the plans (`DayProgress`).
+    var doneAt: Date?
+    /// How the person goes from the plan before to this one, when they chose it (Notion 02 §6-5 ②移動の行);
+    /// nil means the first guess (`TravelMode.defaultMode`).
+    var travelModeRaw: String?
     var trip: Trip?
 
     init(
@@ -56,6 +62,11 @@ final class ItineraryItem {
     var kind: PlanKind {
         get { PlanKind(rawValue: kindRaw) ?? .other }
         set { kindRaw = newValue.rawValue }
+    }
+
+    var travelMode: TravelMode? {
+        get { travelModeRaw.flatMap(TravelMode.init(rawValue:)) }
+        set { travelModeRaw = newValue?.rawValue }
     }
 }
 
@@ -116,5 +127,99 @@ extension Trip {
             item.order = next
             next += 1
         }
+    }
+}
+
+extension Trip {
+    /// Moves a plan to the end of another day, or of 未定 when `day` is nil (Notion 02 §6-3 「予定を動かす」).
+    func move(_ item: ItineraryItem, toDay day: Int?) {
+        let from = items(on: ItineraryDays.placement(of: item.day, dayCount: ItineraryDays.count(of: dates)))
+        guard !(item.day == day && from.contains { $0.id == item.id }) else { return }
+        item.day = day
+        item.order = nextOrder(on: day)
+        renumber(day: day)
+    }
+
+    /// Drops a plan onto another plan: it takes that plan's place, in that plan's day (the plans between shift by one).
+    func reorder(_ item: ItineraryItem, onto target: ItineraryItem) {
+        guard item.id != target.id else { return }
+        let dayCount = ItineraryDays.count(of: dates)
+        let targetDay = ItineraryDays.placement(of: target.day, dayCount: dayCount)
+        var list = items(on: targetDay)
+        guard let targetIndex = list.firstIndex(where: { $0.id == target.id }) else { return }
+        let oldDay = ItineraryDays.placement(of: item.day, dayCount: dayCount)
+        list.removeAll { $0.id == item.id }
+        list.insert(item, at: min(targetIndex, list.count))
+        item.day = targetDay
+        for (index, plan) in list.enumerated() { plan.order = index }
+        if oldDay != targetDay { renumber(day: oldDay) }
+    }
+
+    /// Closes gaps in the order of a day (or of 未定).
+    func renumber(day: Int?) {
+        for (index, plan) in items(on: day).enumerated() { plan.order = index }
+    }
+}
+
+/// What a plan was, to bring it back after 「予定を削除」 and 「元に戻す」 (Notion 02 §6-6 削除の取り消し).
+/// The plan itself is deleted, so this keeps every stored value.
+struct ItineraryItemSnapshot {
+    let id: UUID
+    let title: String
+    let day: Int?
+    let order: Int
+    let kindRaw: String
+    let category: String?
+    let area: String?
+    let latitude: Double?
+    let longitude: Double?
+    let placeID: String?
+    let createdAt: Date
+    let durationMinutes: Int
+    let fixedStartMinutes: Int?
+    let doneAt: Date?
+    let travelModeRaw: String?
+}
+
+extension ItineraryItem {
+    func snapshot() -> ItineraryItemSnapshot {
+        ItineraryItemSnapshot(
+            id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
+            latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
+            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt,
+            travelModeRaw: travelModeRaw
+        )
+    }
+
+    /// A plan with the same values (and the same place in its day, since the order is kept).
+    static func restored(from snapshot: ItineraryItemSnapshot) -> ItineraryItem {
+        let item = ItineraryItem(
+            title: snapshot.title, day: snapshot.day, order: snapshot.order,
+            kind: PlanKind(rawValue: snapshot.kindRaw) ?? .other, category: snapshot.category, area: snapshot.area,
+            latitude: snapshot.latitude, longitude: snapshot.longitude, placeID: snapshot.placeID,
+            now: snapshot.createdAt
+        )
+        item.id = snapshot.id
+        item.kindRaw = snapshot.kindRaw
+        item.durationMinutes = snapshot.durationMinutes
+        item.fixedStartMinutes = snapshot.fixedStartMinutes
+        item.doneAt = snapshot.doneAt
+        item.travelModeRaw = snapshot.travelModeRaw
+        return item
+    }
+}
+
+extension Trip {
+    /// The plan a route to `item` starts from (Notion 02 §6-6 4回目): the plan before it in its day when the trip is
+    /// not in Action. Nil means where the person is: in Action, for the first plan of a day, for 未定,
+    /// and when the plan before has no place.
+    func routeOrigin(for item: ItineraryItem, isAction: Bool) -> ItineraryItem? {
+        guard !isAction else { return nil }
+        let dayCount = ItineraryDays.count(of: dates)
+        guard let day = ItineraryDays.placement(of: item.day, dayCount: dayCount) else { return nil }
+        let plans = items(on: day)
+        guard let index = plans.firstIndex(where: { $0.id == item.id }), index > 0 else { return nil }
+        let before = plans[index - 1]
+        return before.latitude != nil && before.longitude != nil ? before : nil
     }
 }

@@ -8,6 +8,9 @@ struct MapPin: Identifiable, Equatable {
     let day: Int
     let latitude: Double
     let longitude: Double
+    /// In Action a plan marked 済み is grey, and 今 is drawn on top (Notion 02 §6-5 「地図の決まり」).
+    var isDone = false
+    var isNow = false
 
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
 }
@@ -25,11 +28,20 @@ enum ItineraryPins {
 
     /// Numbers count every plan of the day, so a pin keeps the same number as its card
     /// even when a plan before it has no place.
-    static func pins(day: Int, items: [ItineraryItem]) -> [MapPin] {
+    static func pins(day: Int, items: [ItineraryItem], progress: DayProgress? = nil) -> [MapPin] {
         items.enumerated().compactMap { index, item in
             guard let latitude = item.latitude, let longitude = item.longitude else { return nil }
-            return MapPin(id: item.id, number: index + 1, day: day, latitude: latitude, longitude: longitude)
+            let state = progress?.state(of: item.id)
+            return MapPin(
+                id: item.id, number: index + 1, day: day, latitude: latitude, longitude: longitude,
+                isDone: state == .done, isNow: state == .now
+            )
         }
+    }
+
+    /// Pins in drawing order: 今 last, so it lies on top of the others.
+    static func drawingOrder(_ pins: [MapPin]) -> [MapPin] {
+        pins.filter { !$0.isNow } + pins.filter(\.isNow)
     }
 
     /// The area that holds all the points, with room around them. One point gets a street-level area.
@@ -87,14 +99,28 @@ struct ItineraryMap: View {
     /// so the pins are framed in the part that shows.
     let visibleFraction: Double
     let aspect: Double
+    /// The plan whose detail is open: its pin shows the name and the map moves to it.
+    let selectedID: UUID?
+    /// A pin was tapped (Notion 02 §6-5: the plan's detail opens).
+    let onSelect: (UUID) -> Void
     let onAddDestination: () -> Void
 
     @State private var position: MapCameraPosition = .rect(ItineraryPins.rect(of: PlaceSearch.japan))
     @State private var destinationPoints: [CLLocationCoordinate2D] = []
 
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now) == .action }
+
     private var groups: [(day: Int, pins: [MapPin])] {
-        ItineraryPins.days(for: selection, dayCount: ItineraryDays.count(of: trip.dates)).map { day in
-            (day, ItineraryPins.pins(day: day, items: trip.items(on: day)))
+        let today = trip.dates.dayNumber(on: .now)
+        return ItineraryPins.days(for: selection, dayCount: ItineraryDays.count(of: trip.dates)).map { day in
+            let items = trip.items(on: day)
+            let progress = isAction
+                ? DayProgress(
+                    plans: items.map { DayProgress.Input(id: $0.id, isDone: $0.doneAt != nil) },
+                    isToday: day == today
+                )
+                : nil
+            return (day, ItineraryPins.pins(day: day, items: items, progress: progress))
         }
     }
 
@@ -107,6 +133,7 @@ struct ItineraryMap: View {
 
     var body: some View {
         Map(position: $position) {
+            UserAnnotation()
             ForEach(groups, id: \.day) { group in
                 if group.pins.count > 1 {
                     MapPolyline(coordinates: group.pins.map(\.coordinate))
@@ -116,9 +143,12 @@ struct ItineraryMap: View {
                         )
                 }
             }
-            ForEach(pins) { pin in
+            ForEach(ItineraryPins.drawingOrder(pins)) { pin in
                 Annotation("", coordinate: pin.coordinate, anchor: .center) {
-                    Button { focus(on: pin) } label: { pinLabel(pin) }
+                    Button {
+                        onSelect(pin.id)
+                        focus(on: pin)
+                    } label: { pinLabel(pin) }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(pin.day)日目の\(pin.number)番目")
                 }
@@ -128,7 +158,7 @@ struct ItineraryMap: View {
         .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControlVisibility(.hidden)
         .overlay(alignment: .top) {
-            if trip.destinations.isEmpty {
+            if trip.destinations.isEmpty, selectedID == nil {
                 // In the middle of the open map when it is empty (Figma 16-6); near the top once
                 // there are pins, so it never sits on top of one.
                 GeometryReader { geometry in
@@ -144,6 +174,9 @@ struct ItineraryMap: View {
             destinationPoints = await PlaceSearch.coordinates(of: trip.destinations)
         }
         .onChange(of: frameKey, initial: true) { _, _ in frame() }
+        .onChange(of: selectedID) { _, id in
+            if let pin = pins.first(where: { $0.id == id }) { focus(on: pin) }
+        }
     }
 
     private func pinLabel(_ pin: MapPin) -> some View {
@@ -151,9 +184,24 @@ struct ItineraryMap: View {
             .font(Theme.latin(12, .bold))
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
-            .background(Circle().fill(Theme.dayColor(pin.day)))
+            .background(Circle().fill(pin.isDone ? Theme.secondary : Theme.dayColor(pin.day)))
             .overlay(Circle().strokeBorder(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+            .overlay(alignment: .top) {
+                // The open plan's name above its pin; the pin itself stays where it is.
+                if pin.id == selectedID, let title = trip.items.first(where: { $0.id == pin.id })?.title {
+                    Text(title)
+                        .font(Theme.jp(12, .bold))
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(Capsule().fill(Theme.surface))
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
+                        .offset(y: -34)
+                }
+            }
     }
 
     /// Figma 16-6: a trip without a destination shows one button on the map.

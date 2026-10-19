@@ -5,21 +5,23 @@ import SwiftUI
 /// out of the ＋ and melt back into it (Apple, "Applying Liquid Glass to custom views"). The bar stays outside it.
 /// The container's spacing equals the gaps: a larger one melts them together at rest, a smaller one makes the
 /// buttons fade in where they stand instead of growing out of their neighbour.
-/// The selected tab has a glass lens that slides between tabs.
+/// The selected tab has a glass lens (`GlassLens`) that slides between tabs; a finger can pick it up and drag it
+/// along the bar, and it settles on the nearest tab when let go, as in iOS 26's tab bar.
 /// It is drawn by the shell, and inside the itinerary's sheet so it stays at the bottom of the screen there too.
 struct ShellBar: View {
     @Binding var tab: AppShell.Tab
     @Binding var isShowingAddMenu: Bool
     @Binding var sheet: AppShell.AddSheet?
-    @Binding var note: AppShell.AddedNote?
+    @Binding var note: AppShell.ShellNote?
     let trip: Trip
     /// The day a plan added from the ＋ goes to (Notion 02 §6-6 「入れる日」).
     let dayForNewPlan: Int?
     let onAdded: (ItineraryItem) -> Void
-    let onUndo: (AppShell.AddedNote) -> Void
+    let onUndo: (AppShell.ShellNote) -> Void
 
     @Namespace private var glass
-    @Namespace private var lens
+    /// Where a finger is along the bar while it touches it; nil when it does not.
+    @State private var touchX: CGFloat?
 
     private struct MenuItem: Identifiable {
         let id: String
@@ -51,7 +53,8 @@ struct ShellBar: View {
 
             VStack(alignment: .trailing, spacing: 12) {
                 if let note {
-                    noteView(note).transition(.move(edge: .bottom).combined(with: .opacity))
+                    ShellNoteView(note: note, onUndo: onUndo)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 HStack(alignment: .center, spacing: 12) {
                     menuBar
@@ -83,6 +86,9 @@ struct ShellBar: View {
             case .plan(let day):
                 AddPlanSheet(trip: trip, day: day, onAdded: onAdded)
                     .presentationDetents([.large])
+            case .wish:
+                AddPlanSheet(trip: trip)
+                    .presentationDetents([.large])
             case .comingSoon(let title):
                 ComingSoonView(title: title)
                     .presentationDetents([.medium])
@@ -92,38 +98,75 @@ struct ShellBar: View {
 
     // MARK: - Bar
 
+    private static let barPadding: CGFloat = 6
+
     private var menuBar: some View {
-        HStack(spacing: 0) {
-            ForEach(AppShell.Tab.allCases, id: \.self) { item in
-                Button {
-                    setAddMenu(false)
-                    withAnimation(.bouncy(duration: 0.35)) { tab = item }
-                } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: item.symbol(selected: tab == item))
-                            .font(.system(size: 18, weight: .semibold))
-                            .frame(height: 22)
-                        Text(item.title).font(Theme.jp(10, tab == item ? .bold : .medium))
+        GeometryReader { geometry in
+            let tabs = AppShell.Tab.allCases
+            let track = LensTrack(
+                count: tabs.count, itemWidth: (geometry.size.width - Self.barPadding * 2) / CGFloat(tabs.count)
+            )
+            let chosen = tabs.firstIndex(of: tab) ?? 0
+            let lensOffset = touchX.map { track.followingOffset(at: $0) } ?? track.offset(of: chosen)
+            // While touched, the tab under the finger is the one shown as chosen.
+            let shown = touchX.map { track.index(at: $0) } ?? chosen
+            ZStack(alignment: .leading) {
+                GlassLens()
+                    .frame(width: track.itemWidth, height: 56)
+                    .offset(x: lensOffset)
+                HStack(spacing: 0) {
+                    ForEach(Array(tabs.enumerated()), id: \.offset) { index, item in
+                        tabLabel(item, isShown: index == shown)
+                            .frame(width: track.itemWidth)
                     }
-                    .foregroundStyle(tab == item ? Theme.ink : Theme.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background {
-                        if tab == item {
-                            Capsule()
-                                .fill(Theme.ink.opacity(0.08))
-                                .matchedGeometryEffect(id: "lens", in: lens)
+                }
+            }
+            .padding(.horizontal, Self.barPadding)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let position = value.location.x - Self.barPadding
+                        // The lens comes to the finger once, then follows it without a delay.
+                        if touchX == nil {
+                            withAnimation(.snappy(duration: 0.18)) { touchX = position }
+                        } else {
+                            touchX = position
                         }
                     }
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(PressScale())
-                .accessibilityAddTraits(tab == item ? .isSelected : [])
-            }
+                    .onEnded { value in
+                        let index = track.index(at: value.location.x - Self.barPadding)
+                        withAnimation(.bouncy(duration: 0.4)) {
+                            touchX = nil
+                            choose(tabs[index])
+                        }
+                    }
+            )
         }
-        .padding(.horizontal, 6)
         .frame(height: 68)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffect(.regular, in: .capsule)
+        .sensoryFeedback(.selection, trigger: tab)
+    }
+
+    private func tabLabel(_ item: AppShell.Tab, isShown: Bool) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: item.symbol(selected: isShown))
+                .font(.system(size: 18, weight: .semibold))
+                .frame(height: 22)
+            Text(item.title).font(Theme.jp(10, isShown ? .bold : .medium))
+        }
+        .foregroundStyle(isShown ? Theme.ink : Theme.secondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: 56)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(tab == item ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { choose(item) }
+    }
+
+    private func choose(_ item: AppShell.Tab) {
+        setAddMenu(false)
+        tab = item
     }
 
     private var plusButton: some View {
@@ -177,9 +220,14 @@ struct ShellBar: View {
         withAnimation(.bouncy(duration: 0.4, extraBounce: 0.05)) { isShowingAddMenu = isShowing }
     }
 
-    // MARK: - After adding
+}
 
-    private func noteView(_ note: AppShell.AddedNote) -> some View {
+/// The dark note with 「元に戻す」, over the menu bar or over a plan's detail.
+struct ShellNoteView: View {
+    let note: AppShell.ShellNote
+    let onUndo: (AppShell.ShellNote) -> Void
+
+    var body: some View {
         HStack(spacing: 12) {
             Text(note.message)
                 .font(Theme.jp(14, .bold))
@@ -193,14 +241,5 @@ struct ShellBar: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
         .background(RoundedRectangle(cornerRadius: 16).fill(Theme.ink))
-    }
-}
-
-/// A tab shrinks a little while pressed, so a tap is felt even before the lens moves.
-private struct PressScale: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(.bouncy(duration: 0.25), value: configuration.isPressed)
     }
 }

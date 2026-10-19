@@ -37,6 +37,11 @@ struct ItineraryDays {
         }
     }
 
+    /// The date of a day of the trip; nil for 未定 and for a trip without dates.
+    func date(of day: Int?) -> Date? {
+        day.flatMap { number in days.first { $0.number == number }?.date }
+    }
+
     static func count(of dates: TripDates, calendar: Calendar = .current) -> Int {
         switch dates {
         case .undecided: 0
@@ -86,6 +91,16 @@ struct ItineraryDays {
                 return "\(number)日目 ・ \(text.day(date))"
             }
         }
+    }
+
+    /// The note after 「予定を削除」: 「清水寺を削除しました」.
+    static func deletedMessage(title: String) -> String {
+        "\(title)を削除しました"
+    }
+
+    /// The note after marking 済み: 「清水寺を済みにしました」 / 「清水寺の済みを取り消しました」 (Notion 02 §6-5).
+    static func doneMessage(title: String, isDone: Bool) -> String {
+        isDone ? "\(title)を済みにしました" : "\(title)の済みを取り消しました"
     }
 
     /// The note after adding (Figma 15-9): 「伏見稲荷大社を1日目に追加しました」.
