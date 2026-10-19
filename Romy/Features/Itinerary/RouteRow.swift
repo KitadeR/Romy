@@ -19,6 +19,8 @@ struct RouteRow: View {
     var highlight: Color?
 
     @State private var isChoosing = false
+    /// Set when the route should be opened but the app has not been picked yet.
+    @State private var routeRequest: RouteRequest?
     /// The tile tapped, while the lens slides to it and before the tiles close.
     @State private var pendingMode: TravelMode?
 
@@ -148,9 +150,13 @@ struct RouteRow: View {
     }
 
     /// The route button: Liquid Glass tinted with the guide blue (Rhyme's 案内ボタン); on the move from 今 it takes the
-    /// day's color. It opens the route in Apple Maps by the chosen mode.
+    /// day's color. It opens the route by the chosen mode in the app the person picks (asked the first time).
     private func directionButton(_ move: TravelMove, start: MKMapItem, end: MKMapItem) -> some View {
-        Button { RouteLink.open(from: start, to: end, mode: move.mode) } label: {
+        let request = RouteRequest(
+            origin: start, destination: end, mode: move.mode,
+            originText: RouteLink.searchText(origin), destinationText: RouteLink.searchText(destination)
+        )
+        return Button { RouteLink.start(request, chooser: $routeRequest) } label: {
             Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
@@ -159,10 +165,14 @@ struct RouteRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(origin.title)から\(destination.title)への経路（\(move.mode.label)）")
+        .contextMenu {
+            Button("経路のアプリを選び直す") { RouteLink.start(request, chooser: $routeRequest, forceChoice: true) }
+        }
+        .routeChooser($routeRequest)
     }
 }
 
-/// Opens the route between two plans in Apple Maps (Notion 02 §6-5; Google Maps comes later).
+/// Opens the route between two plans in Apple Maps or Google Maps (Notion 02 §6-5; `RouteApps.swift`).
 enum RouteLink {
     static func mapItem(_ item: ItineraryItem) -> MKMapItem? {
         guard let latitude = item.latitude, let longitude = item.longitude else { return nil }

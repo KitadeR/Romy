@@ -48,6 +48,15 @@ enum TravelMode: String, CaseIterable {
         }
     }
 
+    /// The mode Google Maps' route link takes.
+    var googleMode: String {
+        switch self {
+        case .walking: "walking"
+        case .driving: "driving"
+        case .transit: "transit"
+        }
+    }
+
     /// Up to this far in a straight line the first guess is walking, farther the train.
     static let walkingLimitMeters = 1500.0
 

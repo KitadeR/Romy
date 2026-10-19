@@ -42,6 +42,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     @State var isShowingTrips = false
     @State var isPickingPhoto = false
     @State var choosingWish: WishPlace?
+    @State var routeRequest: RouteRequest?
     @State var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
@@ -157,6 +158,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
                 .presentationDetents([.large])
         }
         .tripPhotoPicker(isPresented: $isPickingPhoto, trip: trip)
+        .routeChooser($routeRequest)
         .sheet(item: $choosingWish) { wish in
             WishDaySheet(trip: trip, wish: wish, onAdded: onWishAdded)
                 .presentationDetents([.large])
@@ -226,12 +228,12 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
         if let item = trip.items.first(where: { $0.id == id }) { openDetail(item) }
     }
 
-    /// 経路 opens Apple Maps from the plan before (Plan) or from where the person is (Action).
+    /// 経路 opens the route (Apple Maps or Google Maps) from the plan before (Plan) or from where the person is (Action).
     private func openRoute(to item: ItineraryItem) {
-        guard let destination = RouteLink.mapItem(item) else { return }
         let before = trip.routeOrigin(for: item, isAction: isAction)
         let mode = before.flatMap { TravelTimes.move(from: $0, to: item)?.mode }
-        RouteLink.open(to: destination, from: before.flatMap { RouteLink.mapItem($0) }, mode: mode)
+        guard let request = RouteRequest.route(to: item, from: before, mode: mode) else { return }
+        RouteLink.start(request, chooser: $routeRequest)
     }
 
     // MARK: - Header and tabs
