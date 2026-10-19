@@ -7,7 +7,6 @@ import SwiftUI
 /// which covers the bottom of the screen, so there the bar is drawn inside that sheet.
 struct AppShell: View {
     let trip: Trip
-    let onCreateTrip: () -> Void
 
     enum Tab: CaseIterable {
         case home, itinerary, wishlist, preparation
@@ -58,6 +57,7 @@ struct AppShell: View {
     @State private var tab: Tab = .home
     @State private var itineraryTab: ItineraryTab = .all
     @State private var isShowingAddMenu = false
+    @State private var isCreatingTrip = false
     @State private var sheet: AddSheet?
     @State private var note: ShellNote?
     @State private var highlighted: UUID?
@@ -70,44 +70,27 @@ struct AppShell: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch tab {
-                case .home:
-                    PlanHomeView(
-                        trip: trip,
-                        onCreateTrip: onCreateTrip,
-                        onAddPlans: { sheet = .plan(day: nil) },
-                        onOpenUndecided: {
-                            itineraryTab = .undecided
-                            tab = .itinerary
-                        }
-                    )
-                case .itinerary:
-                    ItineraryView(
-                        trip: trip,
-                        selection: $itineraryTab,
-                        highlighted: highlighted,
-                        isShowingAddMenu: isShowingAddMenu,
-                        onCreateTrip: createTripFromItinerary,
-                        onAdd: { sheet = .plan(day: $0) },
-                        onToggleDone: toggleDone,
-                        travel: travel,
-                        onDelete: delete,
-                        note: note,
-                        onUndo: undo,
-                        bar: { bar }
-                    )
-                case .wishlist, .preparation:
-                    ComingSoonView(title: tab.title)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            if tab != .itinerary {
-                bar
-            }
-        }
+        // One sheet stays up on every tab (like Find My), so the menu bar inside it never changes layer:
+        // on the itinerary it has three heights over the map, on the other tabs it is full height.
+        ItineraryView(
+            trip: trip,
+            selection: $itineraryTab,
+            highlighted: highlighted,
+            isShowingAddMenu: isShowingAddMenu,
+            isActive: tab == .itinerary,
+            isCreatingTrip: $isCreatingTrip,
+            onAdd: { sheet = .plan(day: $0) },
+            onToggleDone: toggleDone,
+            travel: travel,
+            onDelete: delete,
+            note: note,
+            onUndo: undo,
+            bar: { bar },
+            otherDetents: tab == .home ? [.fraction(0.65), .large] : [.large],
+            otherKey: tab.title,
+            other: { otherTab($0) },
+            background: { cover($0) }
+        )
         .task(id: note?.id) {
             guard note != nil else { return }
             try? await Task.sleep(for: .seconds(5))
@@ -116,6 +99,35 @@ struct AppShell: View {
                 note = nil
                 highlighted = nil
             }
+        }
+    }
+
+    /// What the sheet shows on the tabs other than the itinerary.
+    @ViewBuilder
+    private func otherTab(_ actions: HomeActions) -> some View {
+        switch tab {
+        case .home:
+            PlanHomeSheet(
+                trip: trip,
+                actions: actions,
+                onAddPlans: { sheet = .plan(day: nil) },
+                onOpenUndecided: {
+                    itineraryTab = .undecided
+                    tab = .itinerary
+                }
+            )
+        case .wishlist, .preparation:
+            ComingSoonView(title: tab.title)
+        case .itinerary:
+            EmptyView()
+        }
+    }
+
+    /// What stands behind the sheet where the itinerary has its map: Home's cover, or nothing.
+    @ViewBuilder
+    private func cover(_ actions: HomeActions) -> some View {
+        if tab == .home {
+            PlanHomeCover(trip: trip, actions: actions)
         }
     }
 
@@ -130,16 +142,6 @@ struct AppShell: View {
             onAdded: showAdded,
             onUndo: undo
         )
-    }
-
-    /// Trip creation is presented from the root, which cannot happen while the itinerary's sheet is up,
-    /// so the itinerary closes first.
-    private func createTripFromItinerary() {
-        tab = .home
-        Task {
-            try? await Task.sleep(for: .milliseconds(450))
-            onCreateTrip()
-        }
     }
 
     /// Opens the itinerary on the day the plan went to and outlines it for a moment (Figma 15-9).

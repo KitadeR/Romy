@@ -2,25 +2,25 @@ import PhotosUI
 import SwiftData
 import SwiftUI
 
+/// What Home's cover and sheet ask of the shell's sheet. That sheet presents everything (a view behind a sheet
+/// cannot present another one), so the cover only raises these.
+struct HomeActions {
+    var showTrips: () -> Void = {}
+    var decideDates: () -> Void = {}
+    var pickPhoto: () -> Void = {}
+    /// True when the sheet is pulled to full height and the cover is hidden behind it.
+    var isExpanded = false
+}
+
 /// Plan Home 「旅の表紙」 (Notion 02 §6-3, Figma page 6 46:147 / 46:217 / 46:502 / 46:574).
 /// First version (Notion 05): the photo the person chose + one next action.
-/// The photo stays put while the content slides over it as a sheet.
-struct PlanHomeView: View {
+/// The cover (photo and headline) is the shell's background, like the map on the itinerary; what slides over it is
+/// the shell's sheet (`PlanHomeSheet`).
+struct PlanHomeCover: View {
     let trip: Trip
-    let onCreateTrip: () -> Void
-    let onAddPlans: () -> Void
-    /// 「日に入れる」: opens the itinerary's 未定 tab.
-    let onOpenUndecided: () -> Void
+    let actions: HomeActions
 
-    @Environment(\.modelContext) private var modelContext
-    @State private var photoItem: PhotosPickerItem?
-    @State private var isShowingTrips = false
-    @State private var isDecidingDates = false
-    @State private var scrolled = false
-    /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
-    @State private var createAfterTrips = false
-
-    private static let photoHeight: CGFloat = 300
+    private static let photoHeight: CGFloat = 600
     private let text = DateText(calendar: .current, holidays: .bundled)
 
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
@@ -28,56 +28,21 @@ struct PlanHomeView: View {
     /// White text on a photo, ink text on the plain grey.
     private var onPhoto: Color { photo == nil ? Theme.ink : .white }
 
-    /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
-    private var nextAction: NextAction {
-        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count)
-    }
-
     var body: some View {
         ZStack(alignment: .top) {
             cover
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    headline
-                    sheet
-                }
-            }
-            .scrollIndicators(.hidden)
-            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 170 } action: { _, isPast in
-                withAnimation(.snappy) { scrolled = isPast }
-            }
-            if scrolled { compactHeader.transition(.opacity) }
+            headline
         }
-        .background(Theme.surface.ignoresSafeArea())
-        .sheet(isPresented: $isShowingTrips, onDismiss: openCreationIfAsked) {
-            AllTripsSheet(current: trip) { createAfterTrips = true }
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $isDecidingDates) {
-            DecideDatesSheet(trip: trip)
-                .presentationDetents([.large])
-        }
-        .onChange(of: photoItem) { _, item in
-            Task { await savePhoto(item) }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
-
-    private func openCreationIfAsked() {
-        guard createAfterTrips else { return }
-        createAfterTrips = false
-        onCreateTrip()
-    }
-
-    // MARK: - Cover
 
     private var cover: some View {
         ZStack(alignment: .bottomTrailing) {
             if let photo {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity)
+                // The photo only fills what it is given: laid out as an overlay it cannot widen the screen.
+                Color.clear
                     .frame(height: Self.photoHeight)
+                    .overlay { Image(uiImage: photo).resizable().scaledToFill() }
                     .clipped()
                     .overlay(LinearGradient(
                         colors: [.black.opacity(0.35), .clear, .black.opacity(0.2)],
@@ -85,14 +50,15 @@ struct PlanHomeView: View {
                         endPoint: .bottom
                     ))
             } else {
-                Theme.fill.frame(maxWidth: .infinity).frame(height: Self.photoHeight)
+                Theme.fill.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea(edges: .top)
     }
 
     private var photoButton: some View {
-        PhotosPicker(selection: $photoItem, matching: .images) {
+        Button(action: actions.pickPhoto) {
             if photo == nil {
                 Label("写真を選ぶ", systemImage: "photo")
                     .font(Theme.jp(13, .bold))
@@ -109,14 +75,13 @@ struct PlanHomeView: View {
                     .accessibilityLabel("写真を変える")
             }
         }
+        .buttonStyle(.plain)
     }
-
-    // MARK: - Headline over the cover
 
     private var headline: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(countdown.caption).font(Theme.jp(14, .medium))
-            tripNameButton(size: 18)
+            PlanHomeTripName(name: trip.name, size: 18, action: actions.showTrips)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if !countdown.lead.isEmpty { Text(countdown.lead).font(Theme.jp(22, .bold)) }
                 Text(countdown.value)
@@ -126,7 +91,7 @@ struct PlanHomeView: View {
             .padding(.top, 22)
             HStack {
                 if countdown.offersDateDecision {
-                    Button { isDecidingDates = true } label: {
+                    Button(action: actions.decideDates) {
                         Text("日付を決める")
                             .font(Theme.jp(14, .bold))
                             .foregroundStyle(Theme.ink)
@@ -147,69 +112,94 @@ struct PlanHomeView: View {
         .padding(.top, 24)
         .frame(maxWidth: .infinity, minHeight: Self.photoHeight - 60, alignment: .topLeading)
     }
+}
 
-    private func tripNameButton(size: CGFloat) -> some View {
-        Button { isShowingTrips = true } label: {
+/// The trip's name with the arrow that opens the list of all trips.
+struct PlanHomeTripName: View {
+    let name: String
+    let size: CGFloat
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
             HStack(spacing: 4) {
-                Text(trip.name).font(Theme.jp(size, .bold)).lineLimit(1)
+                Text(name).font(Theme.jp(size, .bold)).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: size * 0.6, weight: .bold))
             }
         }
         .buttonStyle(.plain)
         .accessibilityHint("すべての旅行を開く")
     }
+}
 
-    private var compactHeader: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            tripNameButton(size: 18)
-            Text(countdown.short).font(Theme.jp(13, .medium))
-            Spacer()
-        }
-        .foregroundStyle(onPhoto)
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        .background {
-            ZStack {
-                if let photo {
-                    Image(uiImage: photo).resizable().scaledToFill().overlay(Color.black.opacity(0.3))
-                } else {
-                    Theme.fill
-                }
-            }
-            .clipped()
-            .ignoresSafeArea(edges: .top)
-        }
+/// What slides over the cover: the next action. Pulled to full height it also carries the trip's name, since the
+/// cover is hidden behind it then.
+struct PlanHomeSheet: View {
+    let trip: Trip
+    let actions: HomeActions
+    let onAddPlans: () -> Void
+    /// 「日に入れる」: opens the itinerary's 未定 tab.
+    let onOpenUndecided: () -> Void
+
+    private let text = DateText(calendar: .current, holidays: .bundled)
+    private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+
+    /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
+    private var nextAction: NextAction {
+        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count)
     }
 
-    // MARK: - Sheet
-
-    private var sheet: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if actions.isExpanded {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    PlanHomeTripName(name: trip.name, size: 22, action: actions.showTrips)
+                        .foregroundStyle(Theme.ink)
+                    Text(countdown.short).font(Theme.jp(13, .medium)).foregroundStyle(Theme.secondary)
+                    Spacer()
+                }
+                .padding(.top, 8)
+            }
             NextActionCard(action: nextAction) {
                 switch nextAction {
-                case .decideDates: isDecidingDates = true
+                case .decideDates: actions.decideDates()
                 case .placeUndecided: onOpenUndecided()
                 case .addPlans, .trainStep: onAddPlans()
                 }
             }
-            .offset(y: -20)
-            .padding(.bottom, -20)
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 140)
-        .frame(maxWidth: .infinity, minHeight: 600, alignment: .top)
-        .background(
-            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                .fill(Theme.surface)
-                .ignoresSafeArea(edges: .bottom)
-        )
+        .padding(.top, 30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Theme.surface.ignoresSafeArea())
+    }
+}
+
+// MARK: - Photo
+
+extension View {
+    /// Picks the trip's cover photo from the library. It is attached inside the shell's sheet, which is what can
+    /// present it.
+    func tripPhotoPicker(isPresented: Binding<Bool>, trip: Trip) -> some View {
+        modifier(TripPhotoPicker(isPresented: isPresented, trip: trip))
+    }
+}
+
+private struct TripPhotoPicker: ViewModifier {
+    @Binding var isPresented: Bool
+    let trip: Trip
+    @Environment(\.modelContext) private var modelContext
+    @State private var photoItem: PhotosPickerItem?
+
+    func body(content: Content) -> some View {
+        content
+            .photosPicker(isPresented: $isPresented, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                Task { await save(item) }
+            }
     }
 
-    // MARK: - Photo
-
-    private func savePhoto(_ item: PhotosPickerItem?) async {
+    private func save(_ item: PhotosPickerItem?) async {
         guard let item, let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else { return }
         trip.photo = Self.downscaled(image).jpegData(compressionQuality: 0.8)

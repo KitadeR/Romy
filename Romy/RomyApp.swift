@@ -30,15 +30,16 @@ struct RootView: View {
     var body: some View {
         Group {
             if let trip = trips.first {
-                AppShell(trip: trip) { isCreating = true }
+                // The shell's sheet is always up, so it presents trip creation itself.
+                AppShell(trip: trip)
                     .id(trip.id)
             } else {
                 FirstHomeView { isCreating = true }
+                    .sheet(isPresented: $isCreating) {
+                        TripCreationView { trip in trip.lastOpenedAt = .now }
+                            .presentationDetents([.large])
+                    }
             }
-        }
-        .sheet(isPresented: $isCreating) {
-            TripCreationView { trip in trip.lastOpenedAt = .now }
-                .presentationDetents([.large])
         }
     }
 }

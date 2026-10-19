@@ -6,14 +6,17 @@ import SwiftUI
 /// The sheet covers the bottom of the screen, so the menu bar and ＋ are drawn inside it.
 /// In Action (the day before the trip to its last day) today's plans get 済み marks, 今 and the painted
 /// line (Notion 02 §6-5). A plan opens its detail inside the same sheet (`PlanDetailView`).
-struct ItineraryView<Bar: View>: View {
+struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
     /// The plan just added; its card is outlined for a moment (Figma 15-9).
     let highlighted: UUID?
     /// The ＋ menu needs room above the bar, so the sheet rises to the middle height when it opens.
     let isShowingAddMenu: Bool
-    let onCreateTrip: () -> Void
+    /// True while the itinerary tab is chosen; on the other tabs the same sheet shows `other` at full height.
+    let isActive: Bool
+    /// Raised by 「新しい旅行を作る」; trip creation is presented from inside the sheet, which is always up.
+    @Binding var isCreatingTrip: Bool
     /// Opens 「行きたい所・予定を追加」 with the day it goes to (nil = 未定).
     let onAdd: (Int?) -> Void
     /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
@@ -26,24 +29,40 @@ struct ItineraryView<Bar: View>: View {
     let note: AppShell.ShellNote?
     let onUndo: (AppShell.ShellNote) -> Void
     @ViewBuilder let bar: () -> Bar
+    /// What the sheet shows on the other tabs (ホーム／行きたい／準備), the heights it rests at there, and what
+    /// stands behind it where the itinerary has its map (Home's cover).
+    let otherDetents: [PresentationDetent]
+    /// Names the tab shown in `other`, so each tab comes to its own first height instead of the last one's.
+    let otherKey: String
+    @ViewBuilder let other: (HomeActions) -> Other
+    @ViewBuilder let background: (HomeActions) -> Back
 
-    @State private var isShowingTrips = false
-    @State private var isDecidingDates = false
+    @State var isShowingTrips = false
+    @State var isPickingPhoto = false
+    @State var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
-    @State private var isAddingDestinations = false
+    @State var isAddingDestinations = false
     @State private var editingTime: EditingTime?
     @State private var moving: ItineraryItem?
     /// The plan whose detail is open (Notion 02 §6-6); nil shows the itinerary.
-    @State private var detailID: UUID?
+    @State var detailID: UUID?
 
     private struct EditingTime: Identifiable {
         let item: ItineraryItem
         let slot: DaySchedule.Slot
         var id: UUID { item.id }
     }
-    @State private var isSheetPresented = true
-    @State private var detent: PresentationDetent = Self.middle
+    /// Raised without animation when the tab opens, so the sheet is there at once instead of sliding up each time.
+    @State private var isSheetPresented = false
+    /// Where the sheet's content is drawn on the screen, and the size it is laid out in. iOS 26 draws a sheet that
+    /// is not full height a little smaller and off the screen's sides; the menu bar undoes that (`barFit`).
+    @State var sheetFrame: CGRect = .zero
+    @State var sheetLayout: CGSize = .zero
+    @State var screen = ScreenMetrics()
+    @State var otherDetent = OtherDetent()
+    /// The itinerary's own height, kept while another tab holds the sheet at full height.
+    @State var itineraryDetent: PresentationDetent = Self.middle
 
     /// Small: name, caption and tabs above the menu bar. Middle: the map keeps the top 30% (Figma 124:2).
     private static var small: PresentationDetent { .height(300) }
@@ -55,39 +74,34 @@ struct ItineraryView<Bar: View>: View {
     private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
     /// The day of the trip that today is; 今 and スキップ exist only there.
     private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
-    private var detailItem: ItineraryItem? {
+    var detailItem: ItineraryItem? {
         detailID.flatMap { id in trip.items.first { $0.id == id } }
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let insets = geometry.safeAreaInsets
-            let fullHeight = geometry.size.height + insets.top + insets.bottom
-            ItineraryMap(
-                trip: trip,
-                selection: selection,
-                visibleFraction: 0.3,
-                aspect: geometry.size.width / fullHeight,
-                selectedID: detailID,
-                onSelect: openDetail(id:),
-                onAddDestination: { isAddingDestinations = true }
-            )
-            .ignoresSafeArea()
+        ZStack {
+            mapLayer
+            if !isActive { background(homeActions) }
         }
+        .background(Theme.base.ignoresSafeArea())
         .sheet(isPresented: $isSheetPresented) {
             sheet
-                .presentationDetents([Self.small, Self.middle, .large], selection: $detent)
-                .presentationBackgroundInteraction(.enabled(upThrough: Self.middle))
-                .presentationDragIndicator(.visible)
+                .presentationDetents(
+                    isActive ? [Self.small, Self.middle, .large] : Set(otherDetents), selection: detentSelection
+                )
+                .presentationBackgroundInteraction(.enabled)
+                .presentationDragIndicator(isActive || otherDetents.count > 1 ? .visible : .hidden)
                 .presentationBackground(Theme.surface)
-                .presentationCornerRadius(28)
                 .interactiveDismissDisabled()
         }
         .onChange(of: isShowingAddMenu) { _, isShowing in
-            if isShowing, detent == Self.small { withAnimation(.snappy) { detent = Self.middle } }
+            if isShowing, isActive, detent == Self.small { withAnimation(.snappy) { detent = Self.middle } }
         }
         .onChange(of: trip.dates) { _, _ in keepSelectionInRange() }
-        .onAppear(perform: keepSelectionInRange)
+        .onAppear {
+            keepSelectionInRange()
+            withTransaction(.instant) { isSheetPresented = true }
+        }
     }
 
     // MARK: - Sheet
@@ -96,7 +110,9 @@ struct ItineraryView<Bar: View>: View {
     /// behind a sheet cannot present another one.
     private var sheet: some View {
         Group {
-            if let item = detailItem {
+            if !isActive {
+                other(homeActions)
+            } else if let item = detailItem {
                 detail(for: item)
             } else {
                 list
@@ -104,7 +120,16 @@ struct ItineraryView<Bar: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // The detail has its own buttons at the bottom, so the menu bar is only drawn with the list.
-        .overlay { if detailItem == nil { bar() } }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sheetFrame = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { sheetLayout = $0 }
+        .overlay(alignment: .bottom) { if showsBar { barFade } }
+        .overlay {
+            if showsBar {
+                bar()
+                    .scaleEffect(barFit.scale, anchor: .bottom)
+                    .offset(x: barFit.shiftX, y: barFit.shiftY)
+            }
+        }
         .sheet(isPresented: $isAddingDestinations) {
             AddDestinationsSheet(trip: trip)
                 .presentationDetents([.large])
@@ -126,6 +151,11 @@ struct ItineraryView<Bar: View>: View {
         }
         .sheet(isPresented: $isDecidingDates) {
             DecideDatesSheet(trip: trip)
+                .presentationDetents([.large])
+        }
+        .tripPhotoPicker(isPresented: $isPickingPhoto, trip: trip)
+        .sheet(isPresented: $isCreatingTrip) {
+            TripCreationView { trip in trip.lastOpenedAt = .now }
                 .presentationDetents([.large])
         }
     }
@@ -185,7 +215,7 @@ struct ItineraryView<Bar: View>: View {
         }
     }
 
-    private func openDetail(id: UUID) {
+    func openDetail(id: UUID) {
         if let item = trip.items.first(where: { $0.id == id }) { openDetail(item) }
     }
 
@@ -350,6 +380,6 @@ extension ItineraryView {
     private func openCreationIfAsked() {
         guard createAfterTrips else { return }
         createAfterTrips = false
-        onCreateTrip()
+        isCreatingTrip = true
     }
 }
