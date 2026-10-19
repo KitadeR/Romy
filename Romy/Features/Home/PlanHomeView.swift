@@ -8,6 +8,10 @@ struct HomeActions {
     var showTrips: () -> Void = {}
     var decideDates: () -> Void = {}
     var pickPhoto: () -> Void = {}
+    /// 「行きたい」: search for a place to save, ask which day a saved place goes to, take one out.
+    var search: () -> Void = {}
+    var chooseDay: (WishPlace) -> Void = { _ in }
+    var removeWish: (WishPlace) -> Void = { _ in }
     /// True when the sheet is pulled to full height and the cover is hidden behind it.
     var isExpanded = false
 }

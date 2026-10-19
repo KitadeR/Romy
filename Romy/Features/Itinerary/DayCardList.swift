@@ -12,6 +12,9 @@ struct DayCardList: View {
     let todayNumber: Int?
     let highlighted: UUID?
     let travel: TravelTimes
+    /// The card a carried card is over, while one is carried (the moves between cards are hidden then).
+    @State private var carried: UUID?
+    private var isCarrying: Bool { carried != nil }
     let calendar: Calendar
     let onEditTime: (ItineraryItem, DaySchedule.Slot) -> Void
     let onToggleDone: (ItineraryItem) -> Void
@@ -55,7 +58,8 @@ struct DayCardList: View {
         }
         return VStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 {
+                // While a card is carried over the others, the moves between them step aside (Notion 05).
+                if index > 0, !isCarrying {
                     RouteRow(
                         origin: items[index - 1], destination: item, isOnADay: day != nil, travel: travel,
                         line: lineStyle(of: items[index - 1])?.forMove,
@@ -79,6 +83,8 @@ struct DayCardList: View {
                     }
                     withAnimation(.snappy) { trip.reorder(dragged, onto: item) }
                     return true
+                } isTargeted: { isTargeted in
+                    withAnimation(.snappy) { carried = isTargeted ? item.id : (carried == item.id ? nil : carried) }
                 }
             }
         }

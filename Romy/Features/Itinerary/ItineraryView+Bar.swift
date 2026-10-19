@@ -67,6 +67,7 @@ extension ItineraryView {
             showTrips: { isShowingTrips = true },
             decideDates: { isDecidingDates = true },
             pickPhoto: { isPickingPhoto = true },
+            chooseDay: { choosingWish = $0 },
             isExpanded: detent == .large
         )
     }

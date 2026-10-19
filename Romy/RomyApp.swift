@@ -18,7 +18,7 @@ struct RomyApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [Trip.self, ItineraryItem.self])
+        .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
     }
 }
 

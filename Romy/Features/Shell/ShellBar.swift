@@ -86,6 +86,9 @@ struct ShellBar: View {
             case .plan(let day):
                 AddPlanSheet(trip: trip, day: day, onAdded: onAdded)
                     .presentationDetents([.large])
+            case .wish:
+                AddPlanSheet(trip: trip)
+                    .presentationDetents([.large])
             case .comingSoon(let title):
                 ComingSoonView(title: title)
                     .presentationDetents([.medium])

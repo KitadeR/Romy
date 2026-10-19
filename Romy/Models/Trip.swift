@@ -22,6 +22,8 @@ final class Trip {
     var dayStartMinutes: Int = 9 * 60
     /// Plans on the days and in 未定 (Notion 02 §5).
     @Relationship(deleteRule: .cascade, inverse: \ItineraryItem.trip) var items: [ItineraryItem] = []
+    /// Places saved with ♥ in 「行きたい」 (Notion 02 §6-6).
+    @Relationship(deleteRule: .cascade, inverse: \WishPlace.trip) var wishes: [WishPlace] = []
 
     init(name: String, isNameAuto: Bool, destinations: [Destination], dates: TripDates, now: Date = .now) {
         self.id = UUID()

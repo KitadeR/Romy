@@ -28,6 +28,8 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     /// The shell's note (済み, 削除), shown over a plan's detail, where the menu bar is not.
     let note: AppShell.ShellNote?
     let onUndo: (AppShell.ShellNote) -> Void
+    /// A plan was added from 「行きたい」 (the shell offers 「元に戻す」).
+    let onWishAdded: (ItineraryItem) -> Void
     @ViewBuilder let bar: () -> Bar
     /// What the sheet shows on the other tabs (ホーム／行きたい／準備), the heights it rests at there, and what
     /// stands behind it where the itinerary has its map (Home's cover).
@@ -39,6 +41,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
 
     @State var isShowingTrips = false
     @State var isPickingPhoto = false
+    @State var choosingWish: WishPlace?
     @State var isDecidingDates = false
     /// Set by 「新しい旅行を作る」; creation opens once the trip list has closed.
     @State private var createAfterTrips = false
@@ -154,6 +157,10 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
                 .presentationDetents([.large])
         }
         .tripPhotoPicker(isPresented: $isPickingPhoto, trip: trip)
+        .sheet(item: $choosingWish) { wish in
+            WishDaySheet(trip: trip, wish: wish, onAdded: onWishAdded)
+                .presentationDetents([.large])
+        }
         .sheet(isPresented: $isCreatingTrip) {
             TripCreationView { trip in trip.lastOpenedAt = .now }
                 .presentationDetents([.large])

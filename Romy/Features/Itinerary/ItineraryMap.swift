@@ -133,6 +133,7 @@ struct ItineraryMap: View {
 
     var body: some View {
         Map(position: $position) {
+            UserAnnotation()
             ForEach(groups, id: \.day) { group in
                 if group.pins.count > 1 {
                     MapPolyline(coordinates: group.pins.map(\.coordinate))

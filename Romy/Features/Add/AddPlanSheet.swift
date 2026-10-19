@@ -4,10 +4,13 @@ import SwiftUI
 
 /// 「行きたい所・予定を追加」 (Notion 02 §6-6 ＋ボタン ①, Figma 15-2 / 15-3).
 /// Search a place, or add by name only. The day comes from where it was opened and can be changed with ▾.
-/// The 「行きたい」 list in this sheet and the ♡ come with the 行きたい tab (Notion 05).
+/// Each result also has a ♥ that saves the place in 「行きたい」 (Notion 02 §6-6); opened from 行きたい the sheet only
+/// saves places: no day, no name-only plans.
 struct AddPlanSheet: View {
     let trip: Trip
     let onAdded: (ItineraryItem) -> Void
+    /// Opened from the 行きたい tab: results are saved with ♥ instead of being added to a day.
+    let savesWishes: Bool
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -25,13 +28,22 @@ struct AddPlanSheet: View {
     init(trip: Trip, day: Int?, onAdded: @escaping (ItineraryItem) -> Void) {
         self.trip = trip
         self.onAdded = onAdded
+        savesWishes = false
         _day = State(initialValue: ItineraryDays.placement(of: day, dayCount: ItineraryDays.count(of: trip.dates)))
+    }
+
+    /// The 行きたい tab's search: places only, saved with ♥.
+    init(trip: Trip) {
+        self.trip = trip
+        onAdded = { _ in }
+        savesWishes = true
+        _day = State(initialValue: nil)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("行きたい所・予定を追加").font(Theme.jp(22, .bold)).foregroundStyle(Theme.ink)
+                Text(savesWishes ? "行きたい所を探す" : "行きたい所・予定を追加").font(Theme.jp(22, .bold)).foregroundStyle(Theme.ink)
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
@@ -43,16 +55,18 @@ struct AddPlanSheet: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("閉じる")
             }
-            dayPicker
+            if !savesWishes { dayPicker }
             searchField
             ScrollView {
                 VStack(spacing: 10) {
                     if !typed.isEmpty {
-                        row(
-                            icon: AnyView(Text("Aa").font(Theme.latin(15, .bold)).foregroundStyle(Theme.secondary)),
-                            title: "「\(typed)」を名前だけで追加",
-                            detail: "場所なしの予定（あとで場所を足せる）"
-                        ) { addByName() }
+                        if !savesWishes {
+                            row(
+                                icon: AnyView(Text("Aa").font(Theme.latin(15, .bold)).foregroundStyle(Theme.secondary)),
+                                title: "「\(typed)」を名前だけで追加",
+                                detail: "場所なしの予定（あとで場所を足せる）"
+                            ) { addByName() }
+                        }
                         ForEach(search.results) { result in
                             row(
                                 icon: AnyView(Image(systemName: result.kind.symbol)
@@ -60,8 +74,11 @@ struct AddPlanSheet: View {
                                     .foregroundStyle(Theme.secondary)),
                                 title: result.title,
                                 detail: result.detail,
-                                isBusy: resolvingID == result.id
-                            ) { add(result) }
+                                isBusy: resolvingID == result.id,
+                                heart: isSaved(result),
+                                onHeart: { toggleWish(result) },
+                                action: { savesWishes ? toggleWish(result) : add(result) }
+                            )
                         }
                     }
                 }
@@ -140,7 +157,30 @@ struct AddPlanSheet: View {
     }
 
     private func row(
-        icon: AnyView, title: String, detail: String, isBusy: Bool = false, action: @escaping () -> Void
+        icon: AnyView, title: String, detail: String, isBusy: Bool = false,
+        heart: Bool? = nil, onHeart: @escaping () -> Void = {}, action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 0) {
+            rowButton(icon: icon, title: title, detail: detail, showsPlus: !savesWishes, action: action)
+            if let heart {
+                Button(action: onHeart) {
+                    Image(systemName: heart ? "heart.fill" : "heart")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(heart ? Theme.ink : Theme.secondary)
+                        .frame(width: 40, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(heart ? "\(title)を行きたいから外す" : "\(title)を行きたいに保存")
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line, lineWidth: 1))
+        .opacity(isBusy ? 0.5 : 1)
+    }
+
+    private func rowButton(
+        icon: AnyView, title: String, detail: String, showsPlus: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
@@ -152,20 +192,18 @@ struct AddPlanSheet: View {
                     Text(detail).font(Theme.jp(12, .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(Theme.ink))
+                if showsPlus {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Theme.ink))
+                }
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line, lineWidth: 1))
             .contentShape(Rectangle())
-            .opacity(isBusy ? 0.5 : 1)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title)、\(detail)、追加")
+        .accessibilityLabel(showsPlus ? "\(title)、\(detail)、追加" : "\(title)、\(detail)")
     }
 
     // MARK: - Adding
@@ -223,5 +261,57 @@ struct AddPlanSheet: View {
         try? modelContext.save()
         onAdded(item)
         dismiss()
+    }
+}
+
+extension AddPlanSheet {
+    // MARK: - Saving with ♥
+
+    /// The saved place that is this result: the same Apple place, or (before it is looked up) the same name.
+    private func savedWish(for result: PlaceSearch.Result) -> WishPlace? {
+        trip.wishes.first { wish in
+            if let id = result.item?.identifier?.rawValue, let placeID = wish.placeID { return id == placeID }
+            return wish.title == result.title
+        }
+    }
+
+    private func isSaved(_ result: PlaceSearch.Result) -> Bool { savedWish(for: result) != nil }
+
+    /// ♥ saves the place in 「行きたい」, or takes it out when it is already there. A suggestion is looked up first.
+    private func toggleWish(_ result: PlaceSearch.Result) {
+        if let wish = savedWish(for: result) {
+            modelContext.delete(wish)
+            try? modelContext.save()
+            return
+        }
+        guard resolvingID == nil else { return }
+        guard result.item == nil else {
+            saveWish(result)
+            return
+        }
+        resolvingID = result.id
+        Task {
+            let resolved = await PlaceSearch.resolve(result)
+            resolvingID = nil
+            if let resolved { saveWish(resolved) }
+        }
+    }
+
+    private func saveWish(_ result: PlaceSearch.Result) {
+        guard let place = result.item else { return }
+        let coordinate = place.location.coordinate
+        let wish = WishPlace(
+            title: result.title, kind: result.kind, category: result.category, area: result.town,
+            latitude: coordinate.latitude, longitude: coordinate.longitude, placeID: place.identifier?.rawValue
+        )
+        modelContext.insert(wish)
+        wish.trip = trip
+        try? modelContext.save()
+        Task {
+            let ward = await PlaceSearch.lookUpWard(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            guard let ward, !wish.isDeleted, wish.modelContext != nil else { return }
+            wish.area = ward
+            try? wish.modelContext?.save()
+        }
     }
 }

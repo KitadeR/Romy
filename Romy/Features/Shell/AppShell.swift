@@ -33,11 +33,14 @@ struct AppShell: View {
     /// What the ＋ opens (Notion 02 §6-6). 移動 and 宿 are built next; until then they say so.
     enum AddSheet: Identifiable {
         case plan(day: Int?)
+        /// Search a place to save with ♥ in 「行きたい」.
+        case wish
         case comingSoon(String)
 
         var id: String {
             switch self {
             case .plan(let day): "plan-\(day ?? 0)"
+            case .wish: "wish"
             case .comingSoon(let title): title
             }
         }
@@ -58,6 +61,7 @@ struct AppShell: View {
     @State private var itineraryTab: ItineraryTab = .all
     @State private var isShowingAddMenu = false
     @State private var isCreatingTrip = false
+    @State private var location = LocationProvider()
     @State private var sheet: AddSheet?
     @State private var note: ShellNote?
     @State private var highlighted: UUID?
@@ -85,12 +89,14 @@ struct AppShell: View {
             onDelete: delete,
             note: note,
             onUndo: undo,
+            onWishAdded: noteAdded,
             bar: { bar },
-            otherDetents: tab == .home ? [.fraction(0.65), .large] : [.large],
+            otherDetents: otherDetents,
             otherKey: tab.title,
             other: { otherTab($0) },
             background: { cover($0) }
         )
+        .onChange(of: tab) { _, new in if new == .itinerary || new == .wishlist { location.start() } }
         .task(id: note?.id) {
             guard note != nil else { return }
             try? await Task.sleep(for: .seconds(5))
@@ -116,10 +122,29 @@ struct AppShell: View {
                     tab = .itinerary
                 }
             )
-        case .wishlist, .preparation:
+        case .wishlist:
+            wishlist(actions)
+        case .preparation:
             ComingSoonView(title: tab.title)
         case .itinerary:
             EmptyView()
+        }
+    }
+
+    private func wishlist(_ actions: HomeActions) -> some View {
+        var wishActions = actions
+        wishActions.search = { sheet = .wish }
+        wishActions.removeWish = removeWish
+        let isAction = TripPhase(dates: trip.dates, today: .now) == .action
+        return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
+    }
+
+    /// The heights the sheet rests at on each tab other than the itinerary; the first is where it opens.
+    private var otherDetents: [PresentationDetent] {
+        switch tab {
+        case .home: [.fraction(0.65), .large]
+        case .wishlist: [.fraction(0.7), .height(300), .large]
+        case .itinerary, .preparation: [.large]
         }
     }
 
@@ -128,6 +153,8 @@ struct AppShell: View {
     private func cover(_ actions: HomeActions) -> some View {
         if tab == .home {
             PlanHomeCover(trip: trip, actions: actions)
+        } else if tab == .wishlist {
+            WishlistMap(trip: trip)
         }
     }
 
@@ -181,6 +208,25 @@ struct AppShell: View {
         }
     }
 
+    /// A plan was added from 「行きたい」: the tab stays, and 「元に戻す」 is offered.
+    private func noteAdded(_ item: ItineraryItem) {
+        withAnimation(.snappy) {
+            note = ShellNote(
+                message: ItineraryDays.addedMessage(title: item.title, day: item.day), kind: .added(item)
+            )
+        }
+    }
+
+    /// Takes a place out of 「行きたい」 and offers 「元に戻す」.
+    private func removeWish(_ wish: WishPlace) {
+        let snapshot = wish.snapshot()
+        modelContext.delete(wish)
+        try? modelContext.save()
+        withAnimation(.snappy) {
+            note = ShellNote(message: "「\(snapshot.title)」を行きたいから外しました", kind: .wishRemoved(snapshot))
+        }
+    }
+
     private func undo(_ note: ShellNote) {
         switch note.kind {
         case .added(let item):
@@ -189,6 +235,10 @@ struct AppShell: View {
             item.doneAt = previous
         case .deleted(let snapshot):
             let restored = ItineraryItem.restored(from: snapshot)
+            modelContext.insert(restored)
+            restored.trip = trip
+        case .wishRemoved(let snapshot):
+            let restored = WishPlace.restored(from: snapshot)
             modelContext.insert(restored)
             restored.trip = trip
         }
@@ -207,4 +257,6 @@ enum ShellNoteKind {
     case markChanged(ItineraryItem, previous: Date?)
     /// The plan as it was, to bring back.
     case deleted(ItineraryItemSnapshot)
+    /// The saved place as it was, to bring back to 「行きたい」.
+    case wishRemoved(WishSnapshot)
 }

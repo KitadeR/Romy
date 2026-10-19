@@ -423,7 +423,7 @@ struct PlaceSearchTests {
 struct TripItemsTests {
     private func makeTrip(_ dates: TripDates) throws -> (ModelContext, Trip) {
         let container = try ModelContainer(
-            for: Trip.self, ItineraryItem.self,
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
@@ -759,7 +759,7 @@ struct AreaSearchOrderTests {
 struct PlanDetailTests {
     private func makeTrip(_ dates: TripDates = .days(2)) throws -> (ModelContext, Trip) {
         let container = try ModelContainer(
-            for: Trip.self, ItineraryItem.self,
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
@@ -903,7 +903,7 @@ struct ProgressTimeTests {
 
     @Test func theMarkedTimeCountsOnlyOnTheDayItWasMade() throws {
         let container = try ModelContainer(
-            for: Trip.self, ItineraryItem.self,
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
@@ -1056,7 +1056,7 @@ struct TravelTimeTests {
 
     @Test func aTripAsksForTheTravelBetweenNeighbours() throws {
         let container = try ModelContainer(
-            for: Trip.self, ItineraryItem.self,
+            for: Trip.self, ItineraryItem.self, WishPlace.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = ModelContext(container)
