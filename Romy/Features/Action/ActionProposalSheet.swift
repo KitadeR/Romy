@@ -148,15 +148,20 @@ struct ActionProposalSheet: View {
     }
 
     /// Figma 24案 02: the permission is asked for by the system's own dialog, so this only points to it.
+    /// When it is already given, the place is only not known yet, and Settings would not help.
     private var locationCard: some View {
         messageCard(
             title: "今いる場所が分かりません",
-            detail: "近くを探すには位置情報が必要です。位置を使わずに、ほかの場所から探すこともできます。"
+            detail: location.isAllowed
+                ? "位置情報は許可されています。場所が分かるまで少し待つか、位置を使わずにほかの場所から探せます。"
+                : "近くを探すには位置情報が必要です。位置を使わずに、ほかの場所から探すこともできます。"
         ) {
             if model.canUsePlanPlace {
                 actionButton("今の予定の場所（\(model.opportunity.currentTitle)）から") { model.startFromPlan() }
             }
-            actionButton(location.status == .notDetermined ? "位置情報を許可する" : "設定を開く") { allowLocation() }
+            if !location.isAllowed {
+                actionButton(location.status == .notDetermined ? "位置情報を許可する" : "設定を開く") { allowLocation() }
+            }
         }
     }
 
@@ -172,8 +177,9 @@ struct ActionProposalSheet: View {
     private func results(_ outcome: ActionProposalOutcome) -> some View {
         if !outcome.chipsFailed.isEmpty { failedCard(outcome) }
         if !outcome.chipsWithoutPlaces.isEmpty { noPlacesCard(outcome) }
+        let firstShort = outcome.combinations.firstIndex { !$0.fits && !$0.missingWalk }
         ForEach(Array(outcome.combinations.enumerated()), id: \.offset) { index, way in
-            if !way.fits, !way.missingWalk { shortBand(way) }
+            if !way.fits, !way.missingWalk { shortBand(way, explains: index == firstShort) }
             wayCard(way, letter: ActionProposalModel.letter(index))
         }
     }
@@ -206,7 +212,8 @@ struct ActionProposalSheet: View {
     }
 
     /// 「12分足りない  15:00の予約は動かしません」 (Figma 24案 03).
-    private func shortBand(_ way: ActionCombination) -> some View {
+    /// The note that the next plan is not moved is said once, on the first way that is short.
+    private func shortBand(_ way: ActionCombination, explains: Bool) -> some View {
         HStack(spacing: 8) {
             Text("\(way.shortfallMinutes)分足りない")
                 .font(Theme.jp(12, .bold))
@@ -214,7 +221,7 @@ struct ActionProposalSheet: View {
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .overlay(Capsule().strokeBorder(Theme.ink, lineWidth: 1))
-            if model.opportunity.nextIsFixed {
+            if explains, model.opportunity.nextIsFixed {
                 Text("\(DaySchedule.clock(model.opportunity.nextStartMinutes))の\(model.opportunity.nextTitle)は動かしません")
                     .font(Theme.jp(12, .medium))
                     .foregroundStyle(Theme.secondary)
@@ -248,8 +255,8 @@ struct ActionProposalSheet: View {
     private func timeLine(_ way: ActionCombination) -> String {
         if way.missingWalk { return "歩く時間を調べられませんでした" }
         let walk = "徒歩 合計\(DurationText.text(minutes: way.walkMinutes))"
-        if way.fits { return "\(walk) ・ 予定まで\(DurationText.text(minutes: way.slackMinutes))の余裕" }
-        return "\(walk) ・ 合計\(DurationText.text(minutes: way.shortfallMinutes))足りない"
+        // A way that is short says how short on the band above it, not again here.
+        return way.fits ? "\(walk) ・ 予定まで\(DurationText.text(minutes: way.slackMinutes))の余裕" : walk
     }
 
     private func messageCard<Buttons: View>(
