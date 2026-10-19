@@ -24,11 +24,12 @@ struct WishlistSheet: View {
                     .foregroundStyle(Theme.secondary)
                     .padding(.top, 8)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) { content }
-                        .padding(.bottom, 140)
-                }
-                .scrollIndicators(.hidden)
+                // A List, so a row can be swiped left to take the place out (the ♥ does the same).
+                List { content }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .scrollIndicators(.hidden)
+                    .contentMargins(.bottom, 140, for: .scrollContent)
             }
         }
         .padding(.horizontal, 20)
@@ -41,7 +42,7 @@ struct WishlistSheet: View {
     private var content: some View {
         if isAction, let location {
             ForEach(WishList.nearestFirst(trip.wishes, from: location), id: \.wish.id) { entry in
-                row(entry.wish, distance: WishList.distanceText(entry.meters))
+                swipeable(entry.wish, distance: WishList.distanceText(entry.meters))
             }
         } else {
             ForEach(WishList.groups(trip.wishes)) { group in
@@ -49,9 +50,26 @@ struct WishlistSheet: View {
                     .font(Theme.jp(12, .bold))
                     .foregroundStyle(Theme.secondary)
                     .padding(.top, 6)
-                ForEach(group.wishes) { row($0, distance: nil) }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+                ForEach(group.wishes) { swipeable($0, distance: nil) }
             }
         }
+    }
+
+    /// A row that takes the place out of 「行きたい」 when swiped left (all the way or by its button).
+    private func swipeable(_ wish: WishPlace, distance: String?) -> some View {
+        row(wish, distance: distance)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button { actions.removeWish(wish) } label: {
+                    Label("外す", systemImage: "heart.slash")
+                }
+                .tint(Theme.ink)
+            }
     }
 
     private var searchButton: some View {
