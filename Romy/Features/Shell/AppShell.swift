@@ -143,7 +143,7 @@ struct AppShell: View {
     private var otherDetents: [PresentationDetent] {
         switch tab {
         case .home: [.fraction(0.65), .large]
-        case .wishlist: [.fraction(0.7), .height(300), .large]
+        case .wishlist: [SheetHeights.middle, SheetHeights.small, SheetHeights.low, .large]
         case .itinerary, .preparation: [.large]
         }
     }

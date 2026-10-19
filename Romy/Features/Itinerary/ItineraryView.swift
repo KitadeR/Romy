@@ -68,9 +68,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     /// The itinerary's own height, kept while another tab holds the sheet at full height.
     @State var itineraryDetent: PresentationDetent = Self.middle
 
-    /// Small: name, caption and tabs above the menu bar. Middle: the map keeps the top 30% (Figma 124:2).
-    private static var small: PresentationDetent { .height(300) }
-    private static var middle: PresentationDetent { .fraction(0.7) }
+    private static var middle: PresentationDetent { SheetHeights.middle }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
@@ -91,7 +89,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
         .sheet(isPresented: $isSheetPresented) {
             sheet
                 .presentationDetents(
-                    isActive ? [Self.small, Self.middle, .large] : Set(otherDetents), selection: detentSelection
+                    isActive ? SheetHeights.all : Set(otherDetents), selection: detentSelection
                 )
                 .presentationBackgroundInteraction(.enabled)
                 .presentationDragIndicator(isActive || otherDetents.count > 1 ? .visible : .hidden)
@@ -99,7 +97,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
                 .interactiveDismissDisabled()
         }
         .onChange(of: isShowingAddMenu) { _, isShowing in
-            if isShowing, isActive, detent == Self.small { withAnimation(.snappy) { detent = Self.middle } }
+            if isShowing, isActive, SheetHeights.isLow(detent) { withAnimation(.snappy) { detent = Self.middle } }
         }
         .onChange(of: trip.dates) { _, _ in keepSelectionInRange() }
         .onAppear {

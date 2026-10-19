@@ -9,6 +9,19 @@ extension Transaction {
     }
 }
 
+/// The four heights the itinerary's sheet rests at, like Rhyme's (Notion 02 §6-5; 2026-10-19): 小 is the name and the
+/// menu bar with the map almost whole, 小と中の間 adds the tabs and the first plans, 中 leaves the map the top 30%, and 大
+/// is the whole screen. The bar needs about 165pt, so no height is lower.
+enum SheetHeights {
+    static let low = PresentationDetent.height(165)
+    static let small = PresentationDetent.height(380)
+    static let middle = PresentationDetent.fraction(0.7)
+    static let all: Set<PresentationDetent> = [low, small, middle, .large]
+
+    /// The two heights below the middle, where there is no room for the ＋ menu or a plan's detail.
+    static func isLow(_ detent: PresentationDetent) -> Bool { detent == low || detent == small }
+}
+
 /// The screen's size and its bottom safe area, measured behind the sheet.
 nonisolated struct ScreenMetrics: Equatable, Sendable {
     var width: CGFloat = 0
