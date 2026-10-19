@@ -218,9 +218,10 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
 
     /// Opens a plan's detail; it needs room, so a small sheet rises to the middle height.
     private func openDetail(_ item: ItineraryItem) {
+        // The map has to stay in view: from the small or the large height the detail comes to the middle.
         withAnimation(.snappy) {
             detailID = item.id
-            if detent == Self.small { detent = Self.middle }
+            detent = Self.middle
         }
     }
 
