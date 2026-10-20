@@ -73,9 +73,9 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
-    private var isAction: Bool { TripPhase(dates: trip.dates, today: AppClock.now, calendar: text.calendar) == .action }
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
     /// The day of the trip that today is; 今 and スキップ exist only there.
-    private var todayNumber: Int? { trip.dates.dayNumber(on: AppClock.now, calendar: text.calendar) }
+    private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
     var detailItem: ItineraryItem? {
         detailID.flatMap { id in trip.items.first { $0.id == id } }
     }

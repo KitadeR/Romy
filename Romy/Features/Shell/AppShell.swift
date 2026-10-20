@@ -135,7 +135,7 @@ struct AppShell: View {
         var wishActions = actions
         wishActions.search = { sheet = .wish }
         wishActions.removeWish = removeWish
-        let isAction = TripPhase(dates: trip.dates, today: AppClock.now) == .action
+        let isAction = TripPhase(dates: trip.dates, today: .now) == .action
         return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
     }
 
@@ -186,7 +186,7 @@ struct AppShell: View {
     /// Marks a plan 済み, or takes the mark off, and offers 「元に戻す」 (Notion 02 §6-5).
     private func toggleDone(_ item: ItineraryItem) {
         let previous = item.doneAt
-        item.doneAt = previous == nil ? AppClock.now : nil
+        item.doneAt = previous == nil ? .now : nil
         try? modelContext.save()
         withAnimation(.snappy) {
             note = ShellNote(
