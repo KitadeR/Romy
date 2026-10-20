@@ -27,14 +27,24 @@ struct RootView: View {
     @Query(sort: \Trip.lastOpenedAt, order: .reverse) private var trips: [Trip]
     @State private var isCreating = false
 
+    #if DEBUG
+    @Environment(\.modelContext) private var debugContext
+    #endif
+
     var body: some View {
         #if DEBUG
-        // DUMMY for the poster: a still mock of Figma 23案 (ActionCheckMockView) replaces the app. Debug builds only.
-        if let phase = ActionCheckMockView.launchPhase {
-            ActionCheckMockView(phase: phase)
-        } else {
-            content
+        // DUMMY for the poster: still mocks of Figma 23案 and the Action Home replace the app, and a folder of
+        // photos can be put on the trip (ActionCheckMockView, ActionHomeMockView, DebugPhotoLoader). Debug builds only.
+        Group {
+            if let phase = ActionCheckMockView.launchPhase {
+                ActionCheckMockView(phase: phase)
+            } else if ActionHomeMockView.isLaunched {
+                ActionHomeMockView()
+            } else {
+                content
+            }
         }
+        .task { DebugPhotoLoader.run(trips: trips, context: debugContext) }
         #else
         content
         #endif

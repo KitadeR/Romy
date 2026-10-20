@@ -79,7 +79,7 @@ struct AllTripsSheet: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(trip.name).font(Theme.jp(16, .bold)).foregroundStyle(Theme.ink)
-                Text(TripCountdown(dates: trip.dates, today: .now, text: text).caption)
+                Text(TripCountdown(dates: trip.dates, today: AppClock.now, text: text).caption)
                     .font(Theme.jp(12, .medium))
                     .foregroundStyle(Theme.secondary)
             }

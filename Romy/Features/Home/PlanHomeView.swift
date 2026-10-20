@@ -27,7 +27,7 @@ struct PlanHomeCover: View {
     private static let photoHeight: CGFloat = 600
     private let text = DateText(calendar: .current, holidays: .bundled)
 
-    private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: AppClock.now, text: text) }
     private var photo: UIImage? { trip.photo.flatMap(UIImage.init(data:)) }
     /// White text on a photo, ink text on the plain grey.
     private var onPhoto: Color { photo == nil ? Theme.ink : .white }
@@ -146,7 +146,7 @@ struct PlanHomeSheet: View {
     let onOpenUndecided: () -> Void
 
     private let text = DateText(calendar: .current, holidays: .bundled)
-    private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: AppClock.now, text: text) }
 
     /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
     private var nextAction: NextAction {

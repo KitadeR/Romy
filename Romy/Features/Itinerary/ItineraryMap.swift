@@ -108,10 +108,10 @@ struct ItineraryMap: View {
     @State private var position: MapCameraPosition = .rect(ItineraryPins.rect(of: PlaceSearch.japan))
     @State private var destinationPoints: [CLLocationCoordinate2D] = []
 
-    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now) == .action }
+    private var isAction: Bool { TripPhase(dates: trip.dates, today: AppClock.now) == .action }
 
     private var groups: [(day: Int, pins: [MapPin])] {
-        let today = trip.dates.dayNumber(on: .now)
+        let today = trip.dates.dayNumber(on: AppClock.now)
         return ItineraryPins.days(for: selection, dayCount: ItineraryDays.count(of: trip.dates)).map { day in
             let items = trip.items(on: day)
             let progress = isAction

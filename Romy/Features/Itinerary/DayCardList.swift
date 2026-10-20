@@ -27,8 +27,8 @@ struct DayCardList: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            list(now: context.date)
+        TimelineView(.periodic(from: .now, by: 30)) { _ in
+            list(now: AppClock.now)
         }
         .task(id: moves) { await travel.load(moves) }
     }
