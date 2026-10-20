@@ -25,6 +25,8 @@ struct PlanDetailView: View {
     let onMove: () -> Void
     let onSendToUndecided: () -> Void
     let onRoute: () -> Void
+    /// 「この後の過ごし方を提案」: only on the plan that is 今, when a later plan has a place (Notion 02 §6-4).
+    var onSuggest: (() -> Void)?
     let onToggleDone: () -> Void
     let onDelete: () -> Void
 
@@ -41,6 +43,7 @@ struct PlanDetailView: View {
                     VStack(spacing: 12) {
                         PlanPhotoCard(item: item)
                         timeCard
+                        suggestCard
                         placeCard
                         thisPlanCard
                     }
@@ -117,6 +120,31 @@ struct PlanDetailView: View {
                     .font(Theme.jp(14, .medium))
                     .foregroundStyle(Theme.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var suggestCard: some View {
+        if let onSuggest {
+            Button(action: onSuggest) {
+                card {
+                    HStack(spacing: 12) {
+                        Image(systemName: "sparkles").font(.system(size: 15, weight: .semibold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("この後の過ごし方を提案").font(Theme.jp(15, .bold))
+                            Text("次の予定までの時間で寄れる所を探します")
+                                .font(Theme.jp(12, .medium))
+                                .foregroundStyle(Theme.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.faint)
+                    }
+                    .foregroundStyle(Theme.ink)
+                }
+            }
+            .buttonStyle(.plain)
         }
     }
 
