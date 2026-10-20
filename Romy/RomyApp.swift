@@ -28,6 +28,19 @@ struct RootView: View {
     @State private var isCreating = false
 
     var body: some View {
+        #if DEBUG
+        // DUMMY for the poster: a still mock of Figma 23案 (ActionCheckMockView) replaces the app. Debug builds only.
+        if let phase = ActionCheckMockView.launchPhase {
+            ActionCheckMockView(phase: phase)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+
+    private var content: some View {
         Group {
             if let trip = trips.first {
                 // The shell's sheet is always up, so it presents trip creation itself.
