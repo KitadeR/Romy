@@ -205,18 +205,9 @@ private struct TripPhotoPicker: ViewModifier {
 
     private func save(_ item: PhotosPickerItem?) async {
         guard let item, let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else { return }
-        trip.photo = Self.downscaled(image).jpegData(compressionQuality: 0.8)
+              let jpeg = PhotoData.jpeg(from: data, longestSide: PhotoData.coverSide) else { return }
+        trip.photo = jpeg
         try? modelContext.save()
-    }
-
-    /// Keeps the stored cover small: the longer side at most 1600 px.
-    private static func downscaled(_ image: UIImage) -> UIImage {
-        let longest = max(image.size.width, image.size.height)
-        guard longest > 1600 else { return image }
-        let scale = 1600 / longest
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        return UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
     }
 }
 

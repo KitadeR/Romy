@@ -32,6 +32,8 @@ final class ItineraryItem {
     /// How the person goes from the plan before to this one, when they chose it (Notion 02 §6-5 ②移動の行);
     /// nil means the first guess (`TravelMode.defaultMode`).
     var travelModeRaw: String?
+    /// Photo the person chose for the plan (shown on its card and at the top of its detail); nil until chosen.
+    @Attribute(.externalStorage) var photo: Data?
     var trip: Trip?
 
     init(
@@ -179,6 +181,7 @@ struct ItineraryItemSnapshot {
     let fixedStartMinutes: Int?
     let doneAt: Date?
     let travelModeRaw: String?
+    let photo: Data?
 }
 
 extension ItineraryItem {
@@ -187,7 +190,7 @@ extension ItineraryItem {
             id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
             latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
             durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt,
-            travelModeRaw: travelModeRaw
+            travelModeRaw: travelModeRaw, photo: photo
         )
     }
 
@@ -205,6 +208,7 @@ extension ItineraryItem {
         item.fixedStartMinutes = snapshot.fixedStartMinutes
         item.doneAt = snapshot.doneAt
         item.travelModeRaw = snapshot.travelModeRaw
+        item.photo = snapshot.photo
         return item
     }
 }

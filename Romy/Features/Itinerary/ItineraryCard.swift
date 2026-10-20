@@ -23,11 +23,7 @@ struct ItineraryCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(Theme.latin(12, .bold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(color))
+            leading
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title)
                     .font(Theme.jp(isNow ? 17 : isDone ? 14 : 16, .bold))
@@ -50,6 +46,43 @@ struct ItineraryCard: View {
         .opacity(progress == .skipped ? 0.5 : isDone ? 0.55 : 1)
         .animation(.easeOut(duration: 0.3), value: isHighlighted)
         .animation(.snappy, value: progress)
+    }
+
+    /// The number in the day's color.
+    private var badge: some View {
+        Text("\(number)")
+            .font(Theme.latin(12, .bold))
+            .foregroundStyle(.white)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(color))
+    }
+
+    /// Like Rhyme's card, the photo is at the left and the number sits on its corner; without a photo, a dashed box
+    /// adds it. 済み cards are small and light, so they show only the number.
+    @ViewBuilder
+    private var leading: some View {
+        if isDone {
+            badge
+        } else {
+            photoSlot
+                .overlay(alignment: .topLeading) {
+                    badge
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .offset(x: -6, y: -6)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var photoSlot: some View {
+        if let data = item.photo, let image = UIImage(data: data) {
+            Color.clear
+                .frame(width: 56, height: 56)
+                .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            PlanPhotoAddButton(item: item)
+        }
     }
 
     /// A small grey label under the name: the kind of plan, and how long it takes (Rhyme's card).

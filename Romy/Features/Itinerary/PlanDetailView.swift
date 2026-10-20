@@ -2,9 +2,11 @@ import SwiftUI
 
 /// A plan's detail (Notion 02 §6-6 予定の詳細シート, agreed 2026-10-11 and 2026-10-13). It takes the place of the
 /// itinerary inside the same Apple sheet; ✕ goes back to the itinerary with the same tab.
-/// Top to bottom: the time (tap to change it), the place, and 「この予定」 (move, back to 未定, delete).
+/// Top to bottom: the photo the person chose, the time (tap to change it), the place, and 「この予定」
+/// (move, back to 未定, delete).
 /// Two buttons float at the bottom: 経路, and in Action the black 済みにする.
-/// Not yet: the booking card, the place's photos and Apple's place card, Google Maps (Notion 05).
+/// Not yet: the booking card, Apple's place card, Google Maps (Notion 05). The photo is only the one the person picks;
+/// photos that come by themselves are for later.
 struct PlanDetailView: View {
     let item: ItineraryItem
     /// 1-based position in its day (or in 未定): the number on its card and pin.
@@ -37,6 +39,7 @@ struct PlanDetailView: View {
                     .padding(.top, 22)
                 ScrollView {
                     VStack(spacing: 12) {
+                        PlanPhotoCard(item: item)
                         timeCard
                         placeCard
                         thisPlanCard
