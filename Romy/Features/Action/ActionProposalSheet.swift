@@ -254,7 +254,12 @@ struct ActionProposalSheet: View {
 
     private func timeLine(_ way: ActionCombination) -> String {
         if way.missingWalk { return "歩く時間を調べられませんでした" }
-        let walk = "徒歩 合計\(DurationText.text(minutes: way.walkMinutes))"
+        var walk = "徒歩 合計\(DurationText.text(minutes: way.walkMinutes))"
+        // The walk to the next plan is needed anyway; say how much of the total the detour adds.
+        if let detour = way.detourWalkMinutes, detour > 0 {
+            walk += "(うち寄り道 +\(DurationText.text(minutes: detour)))"
+        }
+        if way.walksMoreThanAsked { walk += " ・ 歩くのは少なめより多め" }
         // A way that is short says how short on the band above it, not again here.
         return way.fits ? "\(walk) ・ 予定まで\(DurationText.text(minutes: way.slackMinutes))の余裕" : walk
     }

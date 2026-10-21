@@ -93,6 +93,46 @@ struct ActionProposalTests {
         #expect(way?.detourWalkMinutes != nil)
     }
 
+    @Test func theDetourWalkIsTheTotalMinusTheWalkStraightToTheNextPlan() async {
+        let search: CandidateSearch = { _ in [self.place("パン屋A", east: 0.003, north: 0.002)] }
+        let outcome = await ActionProposal.build(
+            chips: [bread], conditions: [], gap: gap(120), search: search, walking: walking
+        )
+        let way = outcome.combinations.first
+        let direct = way?.directWalkMinutes ?? 0
+        #expect(way?.detourWalkMinutes == max(0, (way?.walkMinutes ?? 0) - direct))
+        #expect((way?.detourWalkMinutes ?? 0) <= (way?.walkMinutes ?? 0))
+    }
+
+    @Test func aLongDetourIsMarkedWhenWalkingLessAndStillShown() async {
+        // Bread to the west, the sea to the north: both inside the halved limit, but the way out and back
+        // adds more than twice that limit (about 19 minutes against 14).
+        let search: CandidateSearch = { query in
+            query.text == "パン" ? [self.place("パン屋A", east: -0.006)] : [self.place("海A", east: 0, north: 0.005)]
+        }
+        let walkLess = ProposalCondition(text: "あまり歩きたくない", kind: .walkLess)
+        let less = await ActionProposal.build(
+            chips: [bread, sea], conditions: [walkLess], gap: gap(120), search: search, walking: walking
+        )
+        let normal = await ActionProposal.build(
+            chips: [bread, sea], conditions: [], gap: gap(120), search: search, walking: walking
+        )
+        #expect(less.combinations.first?.detourLimitMinutes == 14)
+        #expect(less.combinations.first?.walksMoreThanAsked == true)
+        #expect(normal.combinations.first?.detourLimitMinutes == nil)
+        #expect(normal.combinations.first?.walksMoreThanAsked == false)
+        #expect(less.combinations.count == normal.combinations.count)
+    }
+
+    @Test func aShortDetourIsNotMarkedWhenWalkingLess() async {
+        let search: CandidateSearch = { _ in [self.place("パン屋A", east: 0.003)] }
+        let walkLess = ProposalCondition(text: "あまり歩きたくない", kind: .walkLess)
+        let outcome = await ActionProposal.build(
+            chips: [bread], conditions: [walkLess], gap: gap(120), search: search, walking: walking
+        )
+        #expect(outcome.combinations.first?.walksMoreThanAsked == false)
+    }
+
     @Test func aWayThatDoesNotFitKeepsHowManyMinutesItIsShort() async {
         let search: CandidateSearch = { _ in [self.place("パン屋A")] }
         let eat = ProposalChip(text: "ランチ", activity: .eat)

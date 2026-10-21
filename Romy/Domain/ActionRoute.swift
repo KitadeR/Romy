@@ -85,6 +85,8 @@ struct ActionCombination: Equatable {
     let availableMinutes: Int
     /// A walk between two of the points had no answer, so the total is not known.
     let missingWalk: Bool
+    /// Set only when the person does not want to walk: a detour longer than this is marked, not dropped.
+    var detourLimitMinutes: Int?
 
     var totalMinutes: Int { walkMinutes + stayMinutes + ActionGap.marginMinutes }
     var slackMinutes: Int { availableMinutes - totalMinutes }
@@ -92,6 +94,11 @@ struct ActionCombination: Equatable {
     /// 「○分足りない」; zero when it fits or the time is not known.
     var shortfallMinutes: Int { missingWalk ? 0 : max(0, -slackMinutes) }
     var detourWalkMinutes: Int? { directWalkMinutes.map { max(0, walkMinutes - $0) } }
+    /// The detour is longer than the person wanted to walk; the way is still shown (Figma 24案 01).
+    var walksMoreThanAsked: Bool {
+        guard let limit = detourLimitMinutes, let detour = detourWalkMinutes else { return false }
+        return detour > limit
+    }
 }
 
 struct ActionProposalOutcome: Equatable {
@@ -119,10 +126,12 @@ enum ActionProposal {
         guard !chips.isEmpty else {
             return ActionProposalOutcome(combinations: [], chipsWithoutPlaces: [], retriedWith: [:])
         }
+        let walkLess = conditions.contains { $0.kind == .walkLess }
         let limit = WalkLimit.oneWayMinutes(
-            availableMinutes: gap.availableMinutes, walkLess: conditions.contains { $0.kind == .walkLess },
-            widerBy: widerBy
+            availableMinutes: gap.availableMinutes, walkLess: walkLess, widerBy: widerBy
         )
+        // Out and back: a detour longer than twice the one-way limit is marked (provisional, 2026-10-21).
+        let detourLimit = walkLess ? limit * 2 : nil
         let radius = WalkLimit.meters(minutes: limit)
 
         var kept: [(chip: ProposalChip, places: [ProposalPlace])] = []
@@ -153,7 +162,7 @@ enum ActionProposal {
             for next in kept.dropFirst() {
                 if let stop = leastDetour(next, after: stops, to: gap.next) { stops.append(stop) }
             }
-            ways.append(await timed(stops, gap: gap, direct: direct, walking: walking))
+            ways.append(await timed(stops, gap: gap, direct: direct, detourLimit: detourLimit, walking: walking))
         }
         let ordered = ways.sorted { $0.slackMinutes > $1.slackMinutes }
         return ActionProposalOutcome(
@@ -178,7 +187,7 @@ enum ActionProposal {
     }
 
     private static func timed(
-        _ stops: [ActionCombination.Stop], gap: ActionGap, direct: Int?, walking: WalkingTime
+        _ stops: [ActionCombination.Stop], gap: ActionGap, direct: Int?, detourLimit: Int?, walking: WalkingTime
     ) async -> ActionCombination {
         let points = [gap.origin] + stops.map(\.place) + [gap.next]
         var walk = 0
@@ -193,7 +202,7 @@ enum ActionProposal {
         return ActionCombination(
             stops: stops, walkMinutes: walk, directWalkMinutes: direct,
             stayMinutes: stops.map(\.chip.activity.stayMinutes).reduce(0, +),
-            availableMinutes: gap.availableMinutes, missingWalk: missing
+            availableMinutes: gap.availableMinutes, missingWalk: missing, detourLimitMinutes: detourLimit
         )
     }
 }
