@@ -10,9 +10,14 @@ struct ActionSceneSheet: View {
     @State private var editStates = false
     @State private var fromPlan = false
     @State private var revision = 0
+    @State private var previewing = false
+    @State private var problem: SceneApply.Problem?
+    /// Puts the confirmed way into the itinerary; returns why it could not, or nil once it is in.
+    let onApply: (SceneApply) -> SceneApply.Problem?
 
-    init(request: SceneRequest) {
+    init(request: SceneRequest, onApply: @escaping (SceneApply) -> SceneApply.Problem?) {
         _model = State(initialValue: ActionSceneModel(request: request))
+        self.onApply = onApply
     }
 
     private var origin: ProposalPlace? {
@@ -47,8 +52,21 @@ struct ActionSceneSheet: View {
                                     .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                             }
                         }
-                        if let selected = model.selected, let input = model.input {
+                        if let selected = model.selected, let input = model.input, previewing {
+                            ScenePreview(option: selected, input: input, request: model.request, problem: problem) {
+                                apply(selected, input: input)
+                            }
+                        } else if let selected = model.selected, let input = model.input {
                             SceneWaySummary(option: selected, input: input)
+                            Button {
+                                problem = nil
+                                previewing = true
+                            } label: {
+                                Text("この案で旅程を確認").font(Theme.jp(16, .bold))
+                                    .frame(maxWidth: .infinity, minHeight: 56)
+                                    .foregroundStyle(Theme.surface).background(Theme.ink, in: .capsule)
+                            }
+                            .buttonStyle(.plain)
                         } else {
                             stateChips
                             content
@@ -58,7 +76,7 @@ struct ActionSceneSheet: View {
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
-                .id(model.selectedID)
+                .id("\(model.selectedID ?? "")-\(previewing)")
                 .background(Theme.surface)
             }
             .background(Theme.surface)
@@ -77,12 +95,15 @@ struct ActionSceneSheet: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(model.selected.map { "\($0.id)の案" } ?? "候補を比べる").font(Theme.jp(24, .bold))
+            Text(previewing ? "旅程を確認" : model.selected.map { "\($0.id)の案" } ?? "候補を比べる")
+                .font(Theme.jp(24, .bold))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             Button(model.selected == nil ? "閉じる" : "戻る") {
                 if model.selected == nil {
                     dismiss()
+                } else if previewing {
+                    previewing = false
                 } else {
                     model.selectedID = nil
                 }
@@ -183,8 +204,20 @@ struct ActionSceneSheet: View {
     }
 
     private func refresh() async {
+        previewing = false
         let minutes = Trip.minutes(of: .now, on: .now, calendar: .current) ?? 0
         await model.refresh(origin: origin, nowMinutes: minutes, usesPlanPlace: fromPlan)
+    }
+
+    /// 「この内容で旅程に入れる」: the itinerary changes only here, and only when it is still the one searched from.
+    private func apply(_ option: SceneOption, input: SceneInput) {
+        let minutes = Trip.minutes(of: .now, on: .now, calendar: .current) ?? input.nowMinutes
+        switch SceneApply.make(
+            way: option.way, request: model.request, searchedAtMinutes: input.nowMinutes, nowMinutes: minutes
+        ) {
+        case let .failure(reason): problem = reason
+        case let .success(change): problem = onApply(change)
+        }
     }
 
     private func action(_ title: String, perform: @escaping () -> Void) -> some View {

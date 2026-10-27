@@ -64,7 +64,9 @@ struct AppShell: View {
     @State private var location = LocationProvider()
     @State private var sheet: AddSheet?
     @State private var note: ShellNote?
-    @State private var highlighted: UUID?
+    @State private var highlighted: Set<UUID> = []
+    /// The note to show once the proposal has closed and the itinerary is open (段階6).
+    @State private var appliedNote: ShellNote?
     /// Travel times between plans; kept here so they stay when the tab changes.
     @State private var travel = TravelTimes()
 
@@ -108,7 +110,7 @@ struct AppShell: View {
             guard !Task.isCancelled else { return }
             withAnimation(.snappy) {
                 note = nil
-                highlighted = nil
+                highlighted = []
             }
         }
     }
@@ -123,7 +125,9 @@ struct AppShell: View {
                 actions: openingItinerary(actions),
                 travel: travel,
                 onToggleDone: toggleDone,
-                onAddPlans: { sheet = .plan(day: actionDay) }
+                onAddPlans: { sheet = .plan(day: actionDay) },
+                onApplyScene: applyScene,
+                onSceneApplied: showAppliedScene
             )
         case .home:
             PlanHomeSheet(
@@ -210,7 +214,7 @@ struct AppShell: View {
     private func showAdded(_ item: ItineraryItem) {
         itineraryTab = item.day.map { .day($0) } ?? .undecided
         tab = .itinerary
-        highlighted = item.id
+        highlighted = [item.id]
         withAnimation(.snappy) {
             note = ShellNote(
                 message: ItineraryDays.addedMessage(title: item.title, day: item.day), kind: .added(item)
@@ -276,12 +280,41 @@ struct AppShell: View {
             let restored = WishPlace.restored(from: snapshot)
             modelContext.insert(restored)
             restored.trip = trip
+        case .sceneApplied(let added, let before):
+            for item in added { modelContext.delete(item) }
+            trip.restore(before)
         }
         try? modelContext.save()
         withAnimation(.snappy) {
             self.note = nil
-            highlighted = nil
+            highlighted = []
         }
+    }
+}
+
+extension AppShell {
+    /// 「この内容で旅程に入れる」 (Notion 02 §6-4 決定 2026-10-27, Figma 27): the way goes into today, only when today's
+    /// plans are still the ones searched from. The itinerary opens after the proposal has closed.
+    fileprivate func applyScene(_ change: SceneApply) -> SceneApply.Problem? {
+        guard change.matches(trip.items(on: change.day).map { $0.snapshot() }) else { return .changed }
+        let (added, before) = trip.apply(change)
+        for item in added {
+            modelContext.insert(item)
+            item.trip = trip
+        }
+        try? modelContext.save()
+        itineraryTab = .day(change.day)
+        appliedNote = ShellNote(message: change.message, kind: .sceneApplied(added: added, before: before))
+        return nil
+    }
+
+    /// The new plans are outlined and the note offers 「元に戻す」 for about 5 seconds, as after ＋ (Figma 27).
+    fileprivate func showAppliedScene() {
+        guard let applied = appliedNote, case let .sceneApplied(added, _) = applied.kind else { return }
+        appliedNote = nil
+        tab = .itinerary
+        highlighted = Set(added.map(\.id))
+        withAnimation(.snappy) { note = applied }
     }
 }
 
@@ -294,4 +327,6 @@ enum ShellNoteKind {
     case deleted(ItineraryItemSnapshot)
     /// The saved place as it was, to bring back to 「行きたい」.
     case wishRemoved(WishSnapshot)
+    /// A confirmed way: the plans it added, and where the others were (段階6, Figma 27).
+    case sceneApplied(added: [ItineraryItem], before: [PlanPosition])
 }

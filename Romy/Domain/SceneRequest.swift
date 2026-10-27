@@ -6,6 +6,15 @@ struct SceneRequest: Identifiable {
     let plans: [ItineraryItemSnapshot]
     let states: Set<ActionState>
     let strength: TiredStrength?
+    /// When 今 started on the day's schedule; 「この内容で旅程に入れる」 ends it at the time of the search.
+    var currentStartMinutes: Int?
+
+    /// The plans between 今 and the first fixed plan ahead (not 済み), the stay among them, and that fixed plan.
+    struct Ahead {
+        let between: [ItineraryItemSnapshot]
+        let stay: ItineraryItemSnapshot?
+        let next: ItineraryItemSnapshot
+    }
 
     enum Issue: Error, Equatable {
         case missingCurrent, needsLocation, needsFixedPlan, needsNextPlace, needsStayPlace, needsCheckIn
@@ -32,17 +41,15 @@ struct SceneRequest: Identifiable {
 
     /// The first fixed plan ahead is the boundary, even when it has no location. Never skip it to fit a later one.
     func input(origin: ProposalPlace?, nowMinutes: Int) -> Result<SceneInput, Issue> {
-        guard let index = plans.firstIndex(where: { $0.id == id }) else { return .failure(.missingCurrent) }
+        guard plans.contains(where: { $0.id == id }) else { return .failure(.missingCurrent) }
         guard let origin else { return .failure(.needsLocation) }
-        let remaining = Array(plans.dropFirst(index + 1).filter { $0.doneAt == nil })
-        guard let nextIndex = remaining.firstIndex(where: { $0.fixedStartMinutes != nil }) else {
+        guard let ahead = ahead(), let nextStart = ahead.next.fixedStartMinutes else {
             return .failure(.needsFixedPlan)
         }
-        let next = remaining[nextIndex]
-        guard let nextStart = next.fixedStartMinutes else { return .failure(.needsFixedPlan) }
+        let next = ahead.next
         guard let nextPlace = Self.place(next) else { return .failure(.needsNextPlace) }
         var stay: SceneInput.Stay?
-        if let hotel = remaining.prefix(nextIndex).first(where: { $0.kindRaw == PlanKind.stay.rawValue }) {
+        if let hotel = ahead.stay {
             guard let place = Self.place(hotel) else { return .failure(.needsStayPlace) }
             guard let opens = hotel.notBeforeMinutes else { return .failure(.needsCheckIn) }
             stay = SceneInput.Stay(title: hotel.title, place: place, checkInMinutes: opens)
@@ -52,6 +59,16 @@ struct SceneRequest: Identifiable {
             nextStartMinutes: nextStart, states: states,
             strength: states.contains(.tired) ? strength : nil
         ))
+    }
+
+    func ahead() -> Ahead? {
+        guard let index = plans.firstIndex(where: { $0.id == id }) else { return nil }
+        let remaining = Array(plans.dropFirst(index + 1).filter { $0.doneAt == nil })
+        guard let nextIndex = remaining.firstIndex(where: { $0.fixedStartMinutes != nil }) else { return nil }
+        let between = Array(remaining.prefix(nextIndex))
+        return Ahead(
+            between: between, stay: between.first { $0.kindRaw == PlanKind.stay.rawValue }, next: remaining[nextIndex]
+        )
     }
 
     private static func place(_ item: ItineraryItemSnapshot) -> ProposalPlace? {

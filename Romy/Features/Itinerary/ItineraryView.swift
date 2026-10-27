@@ -9,8 +9,8 @@ import SwiftUI
 struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
-    /// The plan just added; its card is outlined for a moment (Figma 15-9).
-    let highlighted: UUID?
+    /// The plans just added; their cards are outlined for a moment (Figma 15-9, 27).
+    let highlighted: Set<UUID>
     /// The ＋ menu needs room above the bar, so the sheet rises to the middle height when it opens.
     let isShowingAddMenu: Bool
     /// True while the itinerary tab is chosen; on the other tabs the same sheet shows `other` at full height.

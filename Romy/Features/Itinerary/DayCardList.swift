@@ -10,7 +10,7 @@ struct DayCardList: View {
     let days: ItineraryDays
     let isAction: Bool
     let todayNumber: Int?
-    let highlighted: UUID?
+    let highlighted: Set<UUID>
     let travel: TravelTimes
     /// The card a carried card is over, while one is carried (the moves between cards are hidden then).
     @State private var carried: UUID?
@@ -69,7 +69,7 @@ struct DayCardList: View {
                 let slot = schedule?.slot(for: item.id)
                 ItineraryRow(
                     item: item, number: index + 1, color: color,
-                    isHighlighted: item.id == highlighted, slot: slot,
+                    isHighlighted: highlighted.contains(item.id), slot: slot,
                     progress: progress?.state(of: item.id), line: lineStyle(of: item),
                     onTapTime: { if let slot { onEditTime(item, slot) } },
                     onToggleDone: { onToggleDone(item) }

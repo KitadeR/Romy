@@ -96,7 +96,7 @@ struct SceneWayRow: View {
     }
 }
 
-/// The real times and names behind the summary; this is read-only until the confirmation flow is implemented.
+/// The real times and names behind the summary. It changes nothing; the itinerary changes only from `ScenePreview`.
 struct SceneWaySummary: View {
     let option: SceneOption
     let input: SceneInput

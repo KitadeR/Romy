@@ -50,7 +50,10 @@ final class ActionSceneModel {
         routeFailed = false
         self.usesPlanPlace = usesPlanPlace
         guard !states.isEmpty else { phase = .empty; return }
-        let updated = SceneRequest(id: request.id, plans: request.plans, states: states, strength: strength)
+        let updated = SceneRequest(
+            id: request.id, plans: request.plans, states: states, strength: strength,
+            currentStartMinutes: request.currentStartMinutes
+        )
         switch updated.input(origin: origin, nowMinutes: nowMinutes) {
         case let .failure(issue): phase = .needsInput(issue)
         case let .success(scene):

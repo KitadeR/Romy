@@ -72,11 +72,16 @@ struct ActionHomeSheet: View {
     let travel: TravelTimes
     let onToggleDone: (ItineraryItem) -> Void
     let onAddPlans: () -> Void
+    /// Puts a confirmed way into the itinerary (段階6); nil once it is in.
+    let onApplyScene: (SceneApply) -> SceneApply.Problem?
+    /// After the proposal has closed: show the itinerary with the new plans.
+    let onSceneApplied: () -> Void
 
     /// The emoji tiles (段階4), then the proposal they open. The proposal waits for the tiles to close.
     @State private var asking: AskRequest?
     @State private var waitingProposal: SceneRequest?
     @State private var proposing: SceneRequest?
+    @State private var applied = false
 
     private let text = DateText(calendar: .current, holidays: .bundled)
 
@@ -121,14 +126,31 @@ struct ActionHomeSheet: View {
         .sheet(item: $asking, onDismiss: openWaitingProposal) { request in
             StateTilesSheet(initial: request.states) { states, strength in
                 let plans = today.map { trip.items(on: $0.day).map { $0.snapshot() } } ?? []
-                waitingProposal = SceneRequest(id: request.id, plans: plans, states: states, strength: strength)
+                waitingProposal = SceneRequest(
+                    id: request.id, plans: plans, states: states, strength: strength,
+                    currentStartMinutes: today?.now?.slot.startMinutes
+                )
                 asking = nil
             }
             .presentationDetents([.large])
         }
-        .sheet(item: $proposing) { request in
-            ActionSceneSheet(request: request).presentationDetents([.large])
+        .sheet(item: $proposing, onDismiss: showApplied) { request in
+            ActionSceneSheet(request: request) { change in
+                let problem = onApplyScene(change)
+                if problem == nil {
+                    applied = true
+                    proposing = nil
+                }
+                return problem
+            }
+            .presentationDetents([.large])
         }
+    }
+
+    private func showApplied() {
+        guard applied else { return }
+        applied = false
+        onSceneApplied()
     }
 
     private func openWaitingProposal() {
