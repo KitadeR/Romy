@@ -4,9 +4,11 @@ import SwiftUI
 /// itinerary inside the same Apple sheet; ✕ goes back to the itinerary with the same tab.
 /// Top to bottom: the photo the person chose, the time (tap to change it), the place, and 「この予定」
 /// (move, back to 未定, delete).
-/// Two buttons float at the bottom: 経路, and in Action the black 済みにする.
-/// Not yet: the booking card, Apple's place card, Google Maps (Notion 05). The photo is only the one the person picks;
-/// photos that come by themselves are for later.
+/// Two buttons float at the bottom: 経路, and the black one for the plan's next step: 「予約完了にする」
+/// while it needs booking (Notion 02 §6-3, 2026-10-27), otherwise in Action 済みにする.
+/// The 予約 card says whether it is booked; a plan that is not a stay can be marked as needing booking there.
+/// Not yet: what the booking is (number, service), Apple's place card, Google Maps (Notion 05).
+/// The photo is only the one the person picks; photos that come by themselves are for later.
 struct PlanDetailView: View {
     let item: ItineraryItem
     /// 1-based position in its day (or in 未定): the number on its card and pin.
@@ -29,6 +31,12 @@ struct PlanDetailView: View {
     var onSuggest: (() -> Void)?
     let onToggleDone: () -> Void
     let onDelete: () -> Void
+    /// 「予約完了にする」 and back to 「予約：まだ」.
+    var onToggleBooked: () -> Void = {}
+    /// The 「予約が要る」 switch of a plan that is not a stay.
+    var onSetBookingNeeded: (Bool) -> Void = { _ in }
+
+    private var awaitsBooking: Bool { item.needsBooking && item.bookedAt == nil }
 
     private var hasPlace: Bool {
         item.latitude != nil && item.longitude != nil
@@ -44,6 +52,7 @@ struct PlanDetailView: View {
                         PlanPhotoCard(item: item)
                         timeCard
                         if item.kind == .stay { StayCheckInCard(item: item) }
+                        bookingCard
                         suggestCard
                         placeCard
                         thisPlanCard
@@ -194,7 +203,7 @@ struct PlanDetailView: View {
                 ShellNoteView(note: note, onUndo: onUndo)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            if hasPlace || canMarkDone {
+            if hasPlace || canMarkDone || awaitsBooking {
                 HStack(spacing: 12) {
                     if hasPlace {
                         Button(action: onRoute) {
@@ -202,13 +211,22 @@ struct PlanDetailView: View {
                                 .font(Theme.jp(16, .bold))
                                 .foregroundStyle(Theme.ink)
                                 .padding(.horizontal, 24)
-                                .frame(maxWidth: canMarkDone ? nil : .infinity, minHeight: 52)
+                                .frame(maxWidth: canMarkDone || awaitsBooking ? nil : .infinity, minHeight: 52)
                                 .glassEffect(.regular.interactive(), in: .capsule)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(item.title)への経路")
                     }
-                    if canMarkDone {
+                    if awaitsBooking {
+                        Button(action: onToggleBooked) {
+                            Text("予約完了にする")
+                                .font(Theme.jp(17, .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .background(Capsule().fill(Theme.ink))
+                        }
+                        .buttonStyle(.plain)
+                    } else if canMarkDone {
                         Button(action: onToggleDone) {
                             Text(item.doneAt == nil ? "済みにする" : "済みを取り消す")
                                 .font(Theme.jp(17, .bold))
@@ -258,5 +276,32 @@ struct PlanDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension PlanDetailView {
+    /// 予約: 「予約：まだ／済み」 (tap 済み to go back to まだ), and for a plan that is not a stay the 「予約が要る」 switch.
+    private var bookingCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 0) {
+                caption("予約")
+                    .padding(.bottom, 4)
+                if item.kind != .stay {
+                    Toggle(isOn: Binding(get: { item.bookingNeeded == true }, set: onSetBookingNeeded)) {
+                        Text("予約が要る").font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink)
+                    }
+                    .tint(Theme.ink)
+                    .padding(.vertical, 6)
+                }
+                if item.needsBooking {
+                    if item.kind != .stay { Divider() }
+                    if item.bookedAt == nil {
+                        Text("予約：まだ").font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink).padding(.vertical, 13)
+                    } else {
+                        row("予約：済み（押すとまだに戻す）", symbol: "checkmark.circle.fill", action: onToggleBooked)
+                    }
+                }
+            }
+        }
     }
 }

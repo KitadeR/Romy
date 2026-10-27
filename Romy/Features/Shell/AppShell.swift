@@ -67,6 +67,8 @@ struct AppShell: View {
     @State private var highlighted: Set<UUID> = []
     /// The note to show once the proposal has closed and the itinerary is open (段階6).
     @State private var appliedNote: ShellNote?
+    /// 「いまどうする？」 from 準備: Home opens the emoji tiles, as its own card does.
+    @State private var askRequested = false
     /// Travel times between plans; kept here so they stay when the tab changes.
     @State private var travel = TravelTimes()
 
@@ -91,6 +93,7 @@ struct AppShell: View {
             isCreatingTrip: $isCreatingTrip,
             onAdd: { sheet = .plan(day: $0) },
             onToggleDone: toggleDone,
+            onToggleBooked: toggleBooked,
             travel: travel,
             onDelete: delete,
             note: note,
@@ -127,7 +130,8 @@ struct AppShell: View {
                 onToggleDone: toggleDone,
                 onAddPlans: { sheet = .plan(day: actionDay) },
                 onApplyScene: applyScene,
-                onSceneApplied: showAppliedScene
+                onSceneApplied: showAppliedScene,
+                askRequested: $askRequested
             )
         case .home:
             PlanHomeSheet(
@@ -137,12 +141,22 @@ struct AppShell: View {
                 onOpenUndecided: {
                     itineraryTab = .undecided
                     tab = .itinerary
-                }
+                },
+                onOpenPlan: { openPlan($0, actions) }
             )
         case .wishlist:
             wishlist(actions)
         case .preparation:
-            ComingSoonView(title: tab.title)
+            PreparationView(
+                trip: trip,
+                onOpen: { openPlan($0.id, actions) },
+                onBook: toggleBooked,
+                onAsk: {
+                    askRequested = true
+                    tab = .home
+                },
+                onAddPlans: { sheet = .plan(day: nil) }
+            )
         case .itinerary:
             EmptyView()
         }
@@ -164,14 +178,6 @@ struct AppShell: View {
             tab = .itinerary
         }
         return opening
-    }
-
-    private func wishlist(_ actions: HomeActions) -> some View {
-        var wishActions = actions
-        wishActions.search = { sheet = .wish }
-        wishActions.removeWish = removeWish
-        let isAction = TripPhase(dates: trip.dates, today: .now) == .action
-        return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
     }
 
     /// The heights the sheet rests at on each tab other than the itinerary; the first is where it opens.
@@ -280,6 +286,8 @@ struct AppShell: View {
             let restored = WishPlace.restored(from: snapshot)
             modelContext.insert(restored)
             restored.trip = trip
+        case .bookingChanged(let item, let previous):
+            item.bookedAt = previous
         case .sceneApplied(let added, let before):
             for item in added { modelContext.delete(item) }
             trip.restore(before)
@@ -293,6 +301,36 @@ struct AppShell: View {
 }
 
 extension AppShell {
+    fileprivate func wishlist(_ actions: HomeActions) -> some View {
+        var wishActions = actions
+        wishActions.search = { sheet = .wish }
+        wishActions.removeWish = removeWish
+        let isAction = TripPhase(dates: trip.dates, today: .now) == .action
+        return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
+    }
+
+    /// Opens a plan's detail on the itinerary, on the plan's own day (or 未定).
+    fileprivate func openPlan(_ id: UUID, _ actions: HomeActions) {
+        let day = trip.items.first { $0.id == id }?.day
+        itineraryTab = ItineraryDays.placement(of: day, dayCount: ItineraryDays.count(of: trip.dates))
+            .map { .day($0) } ?? .undecided
+        actions.openPlan(id)
+        tab = .itinerary
+    }
+
+    /// 「予約完了にする」, or back to 「予約：まだ」, with 「元に戻す」 (Notion 02 §6-3, 2026-10-27).
+    fileprivate func toggleBooked(_ item: ItineraryItem) {
+        let previous = item.bookedAt
+        item.bookedAt = previous == nil ? .now : nil
+        try? modelContext.save()
+        withAnimation(.snappy) {
+            note = ShellNote(
+                message: item.bookedAt == nil ? "\(item.title)を予約：まだに戻しました" : "\(item.title)を予約済みにしました",
+                kind: .bookingChanged(item, previous: previous)
+            )
+        }
+    }
+
     /// 「この内容で旅程に入れる」 (Notion 02 §6-4 決定 2026-10-27, Figma 27): the way goes into today, only when today's
     /// plans are still the ones searched from. The itinerary opens after the proposal has closed.
     fileprivate func applyScene(_ change: SceneApply) -> SceneApply.Problem? {
@@ -327,6 +365,8 @@ enum ShellNoteKind {
     case deleted(ItineraryItemSnapshot)
     /// The saved place as it was, to bring back to 「行きたい」.
     case wishRemoved(WishSnapshot)
+    /// The booking mark the plan had before, to put back.
+    case bookingChanged(ItineraryItem, previous: Date?)
     /// A confirmed way: the plans it added, and where the others were (段階6, Figma 27).
     case sceneApplied(added: [ItineraryItem], before: [PlanPosition])
 }

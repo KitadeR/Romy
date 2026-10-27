@@ -148,13 +148,19 @@ struct PlanHomeSheet: View {
     let onAddPlans: () -> Void
     /// 「日に入れる」: opens the itinerary's 未定 tab.
     let onOpenUndecided: () -> Void
+    /// 「宿を予約する」: opens the plan's detail, where 「予約完了にする」 is.
+    var onOpenPlan: (UUID) -> Void = { _ in }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
 
-    /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
+    /// Shinkansen moves are not built yet, so the choice is a plan to book, 未定 plans or adding plans.
     private var nextAction: NextAction {
-        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count)
+        let booking = Preparation(trip: trip, calendar: text.calendar)
+            .nextBooking(days: ItineraryDays(dates: trip.dates, text: text))
+        return NextActionPicker.pick(
+            dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count, booking: booking
+        )
     }
 
     var body: some View {
@@ -172,6 +178,7 @@ struct PlanHomeSheet: View {
                 switch nextAction {
                 case .decideDates: actions.decideDates()
                 case .placeUndecided: onOpenUndecided()
+                case .book(let booking): onOpenPlan(booking.id)
                 case .addPlans, .trainStep: onAddPlans()
                 }
             }
@@ -224,6 +231,7 @@ struct NextActionCard: View {
         switch action {
         case .trainStep(let step), .decideDates(let step):
             step.day.map { "\($0)日目 \(step.route)" } ?? "未定 \(step.route)"
+        case .book(let booking): booking.context
         case .placeUndecided(let count): "未定の予定 \(count)件"
         case .addPlans: "旅程"
         }
@@ -233,6 +241,7 @@ struct NextActionCard: View {
         switch action {
         case .trainStep(let step): step.title
         case .decideDates: "日付を決める"
+        case .book(let booking): booking.title
         case .placeUndecided: "日に入れる"
         case .addPlans: "予定を追加"
         }

@@ -1,13 +1,16 @@
 import Foundation
 
 /// The one thing the Plan Home shows (Notion 02 §6-2, agreed 2026-10-07):
-/// a Shinkansen step if one can move forward → plans in 未定 to put on a day → add plans.
+/// a Shinkansen step if one can move forward → a plan to book (§6-3, 2026-10-27) → plans in 未定 to put on a day
+/// → add plans.
 /// Plan has no "nothing to do"; the last choice is always adding plans.
 enum NextAction: Equatable {
     /// The next step of a Shinkansen move, e.g. 「乗り方を選ぶ」 (step 1 of 6).
     case trainStep(TrainStep)
     /// The next step needs the official booking, which needs the trip's dates.
     case decideDates(for: TrainStep)
+    /// The first plan in 準備 that is not booked yet: the same one as 準備's black card (Notion 02 §6-3, 2026-10-27).
+    case book(NextBooking)
     /// Plans without a day, in a trip that has days.
     case placeUndecided(count: Int)
     case addPlans
@@ -30,12 +33,22 @@ struct TrainStep: Equatable {
     let needsTripDates: Bool
 }
 
+/// A plan to book, as the Plan Home shows it: 「1日目 ・ 宿 ホテル（例）京都駅前」 and 「宿を予約する」.
+struct NextBooking: Equatable {
+    let id: UUID
+    let context: String
+    let title: String
+}
+
 enum NextActionPicker {
-    static func pick(dates: TripDates, trainSteps: [TrainStep], undecidedPlanCount: Int) -> NextAction {
+    static func pick(
+        dates: TripDates, trainSteps: [TrainStep], undecidedPlanCount: Int, booking: NextBooking? = nil
+    ) -> NextAction {
         if let step = trainSteps.sorted(by: comesFirst).first {
             if step.needsTripDates, case .range = dates { return .trainStep(step) }
             return step.needsTripDates ? .decideDates(for: step) : .trainStep(step)
         }
+        if let booking { return .book(booking) }
         if undecidedPlanCount > 0, dates != .undecided {
             return .placeUndecided(count: undecidedPlanCount)
         }

@@ -21,6 +21,8 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let onAdd: (Int?) -> Void
     /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
     let onToggleDone: (ItineraryItem) -> Void
+    /// 「予約完了にする」, or back to 「予約：まだ」; the shell offers 「元に戻す」.
+    let onToggleBooked: (ItineraryItem) -> Void
     /// The travel times between plans (MapKit), kept while the app runs.
     let travel: TravelTimes
     /// Deletes a plan; the shell offers 「元に戻す」.
@@ -48,6 +50,10 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     @State private var createAfterTrips = false
     @State var isAddingDestinations = false
     @State private var editingTime: EditingTime?
+    /// 「予約が要る？」, asked once after a plan first gets a fixed time (Notion 02 §6-3, 2026-10-27); it waits for the
+    /// time sheet to close.
+    @State var bookingQuestion: ItineraryItem?
+    @State var askingBooking: ItineraryItem?
     @State private var moving: ItineraryItem?
     @State var proposing: ActionOpportunity?
     /// The plan whose detail is open (Notion 02 §6-6); nil shows the itinerary.
@@ -146,13 +152,11 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
                 .presentationDetents([.large])
         }
         .actionProposalSheet($proposing)
-        .sheet(item: $editingTime) { editing in
-            TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
-                editing.item.durationMinutes = duration
-                editing.item.fixedStartMinutes = fixed
-            }
+        .sheet(item: $editingTime, onDismiss: askBookingAfterTime) { editing in
+            TimeSheet(item: editing.item, slot: editing.slot) { saveTime(editing.item, duration: $0, fixed: $1) }
             .presentationDetents([.large])
         }
+        .bookingQuestion($askingBooking)
         .sheet(isPresented: $isDecidingDates) {
             DecideDatesSheet(trip: trip)
                 .presentationDetents([.large])
@@ -214,21 +218,10 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             onDelete: {
                 detailID = nil
                 onDelete(item)
-            }
+            },
+            onToggleBooked: { onToggleBooked(item) },
+            onSetBookingNeeded: { item.bookingNeeded = $0 }
         )
-    }
-
-    /// Opens a plan's detail; it needs room, so a small sheet rises to the middle height.
-    private func openDetail(_ item: ItineraryItem) {
-        // The map has to stay in view: from the small or the large height the detail comes to the middle.
-        withAnimation(.snappy) {
-            detailID = item.id
-            detent = Self.middle
-        }
-    }
-
-    func openDetail(id: UUID) {
-        if let item = trip.items.first(where: { $0.id == id }) { openDetail(item) }
     }
 
     /// 経路 opens the route (Apple Maps or Google Maps) from the plan before (Plan) or from where the person is (Action).

@@ -76,6 +76,8 @@ struct ActionHomeSheet: View {
     let onApplyScene: (SceneApply) -> SceneApply.Problem?
     /// After the proposal has closed: show the itinerary with the new plans.
     let onSceneApplied: () -> Void
+    /// Raised by 「いまどうする？」 in 準備: opens the emoji tiles as the card here does.
+    @Binding var askRequested: Bool
 
     /// The emoji tiles (段階4), then the proposal they open. The proposal waits for the tiles to close.
     @State private var asking: AskRequest?
@@ -123,6 +125,7 @@ struct ActionHomeSheet: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.surface.ignoresSafeArea())
         .task(id: trip.items.count) { await loadTravel() }
+        .onChange(of: askRequested, initial: true) { _, asked in if asked { openAskFromPreparation() } }
         .sheet(item: $asking, onDismiss: openWaitingProposal) { request in
             StateTilesSheet(initial: request.states) { states, strength in
                 let plans = today.map { trip.items(on: $0.day).map { $0.snapshot() } } ?? []
@@ -145,6 +148,13 @@ struct ActionHomeSheet: View {
             }
             .presentationDetents([.large])
         }
+    }
+
+    /// 「いまどうする？」 pressed in 準備: the tiles open here for the plan that is 今, as the card would.
+    private func openAskFromPreparation() {
+        askRequested = false
+        guard let today, let now = today.now, !today.remaining.isEmpty else { return }
+        asking = AskRequest(id: now.item.id, states: [])
     }
 
     private func showApplied() {
