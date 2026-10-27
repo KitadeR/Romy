@@ -26,6 +26,10 @@ final class ItineraryItem {
     var durationMinutes: Int = 60
     /// Start fixed by the person (鍵), in minutes after midnight; nil while the start is a guess (目安).
     var fixedStartMinutes: Int?
+    /// The earliest the plan can start, in minutes after midnight (a stay's check-in 「15:00から」); nil when any
+    /// time is fine. Unlike a fixed start the plan may start later; a guess that comes earlier waits until then
+    /// (Notion 02 §6-4, 2026-10-22: 「この時刻より前は不可」 is its own kind, apart from a fixed time).
+    var notBeforeMinutes: Int?
     /// When the person marked the plan 済み (Notion 02 §6-5 「済みを付ける・外す」); nil while it is not done.
     /// 今 and スキップ are not stored; they come from the order of the plans (`DayProgress`).
     var doneAt: Date?
@@ -179,6 +183,7 @@ struct ItineraryItemSnapshot {
     let createdAt: Date
     let durationMinutes: Int
     let fixedStartMinutes: Int?
+    let notBeforeMinutes: Int?
     let doneAt: Date?
     let travelModeRaw: String?
     let photo: Data?
@@ -189,7 +194,8 @@ extension ItineraryItem {
         ItineraryItemSnapshot(
             id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
             latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
-            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt,
+            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes,
+            notBeforeMinutes: notBeforeMinutes, doneAt: doneAt,
             travelModeRaw: travelModeRaw, photo: photo
         )
     }
@@ -206,6 +212,7 @@ extension ItineraryItem {
         item.kindRaw = snapshot.kindRaw
         item.durationMinutes = snapshot.durationMinutes
         item.fixedStartMinutes = snapshot.fixedStartMinutes
+        item.notBeforeMinutes = snapshot.notBeforeMinutes
         item.doneAt = snapshot.doneAt
         item.travelModeRaw = snapshot.travelModeRaw
         item.photo = snapshot.photo

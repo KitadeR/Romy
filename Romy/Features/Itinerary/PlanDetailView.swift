@@ -43,6 +43,7 @@ struct PlanDetailView: View {
                     VStack(spacing: 12) {
                         PlanPhotoCard(item: item)
                         timeCard
+                        if item.kind == .stay { StayCheckInCard(item: item) }
                         suggestCard
                         placeCard
                         thisPlanCard

@@ -33,6 +33,7 @@ struct ItineraryCard: View {
                     HStack(spacing: 6) {
                         if let label = item.kind.label { chip(label) }
                         chip(DurationText.text(minutes: item.durationMinutes), symbol: "clock")
+                        if let from = item.notBeforeMinutes { chip("\(DaySchedule.clock(from))から") }
                     }
                 }
             }
