@@ -75,8 +75,8 @@ struct ActionHomeSheet: View {
 
     /// The emoji tiles (段階4), then the proposal they open. The proposal waits for the tiles to close.
     @State private var asking: AskRequest?
-    @State private var waitingProposal: ActionOpportunity?
-    @State private var proposing: ActionOpportunity?
+    @State private var waitingProposal: SceneRequest?
+    @State private var proposing: SceneRequest?
 
     private let text = DateText(calendar: .current, holidays: .bundled)
 
@@ -99,8 +99,8 @@ struct ActionHomeSheet: View {
                 }
                 if let today {
                     nowCard(today)
-                    if let now = today.now, let opportunity = actions.opportunity(now.item) {
-                        AskCard { asking = AskRequest(opportunity: opportunity, states: $0) }
+                    if let now = today.now, !today.remaining.isEmpty {
+                        AskCard { asking = AskRequest(id: now.item.id, states: $0) }
                     }
                     if !today.remaining.isEmpty {
                         remaining(today)
@@ -120,14 +120,15 @@ struct ActionHomeSheet: View {
         .task(id: trip.items.count) { await loadTravel() }
         .sheet(item: $asking, onDismiss: openWaitingProposal) { request in
             StateTilesSheet(initial: request.states) { states, strength in
-                var opportunity = request.opportunity
-                opportunity.seedWords = ActionState.bridgeWords(states, strength: strength)
-                waitingProposal = opportunity
+                let plans = today.map { trip.items(on: $0.day).map { $0.snapshot() } } ?? []
+                waitingProposal = SceneRequest(id: request.id, plans: plans, states: states, strength: strength)
                 asking = nil
             }
             .presentationDetents([.large])
         }
-        .actionProposalSheet($proposing)
+        .sheet(item: $proposing) { request in
+            ActionSceneSheet(request: request).presentationDetents([.large])
+        }
     }
 
     private func openWaitingProposal() {
@@ -260,9 +261,8 @@ struct ActionHomeSheet: View {
 
 /// The tiles to open, with the states already chosen from the Home card's chips.
 private struct AskRequest: Identifiable {
-    let opportunity: ActionOpportunity
+    let id: UUID
     let states: Set<ActionState>
-    var id: UUID { opportunity.id }
 }
 
 /// 「いまどうする？」 (Figma 26-01): right under the plan that is 今, with three states the person often has. The card

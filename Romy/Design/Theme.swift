@@ -10,6 +10,8 @@ enum Theme {
     static let rangeFill = Color(hex: 0xE6E6E6)
     static let line = Color(hex: 0xDCDCDC)
     static let secondary = Color(hex: 0x8A8A8A)
+    /// Secondary text on the white Action comparison sheets (Figma 25); also readable in dark system appearance.
+    static let actionSecondary = Color(hex: 0x747474)
     static let faint = Color(hex: 0xC8C8C8)
     /// The blue of the buttons that guide (Rhyme's 案内ボタン, about #2FA8F5): the route button of a move.
     static let guide = Color(hex: 0x2FA8F5)

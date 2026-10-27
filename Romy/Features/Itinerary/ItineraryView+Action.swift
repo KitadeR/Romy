@@ -48,13 +48,9 @@ private struct ActionProposalPresenter: View {
     @Environment(LocationProvider.self) private var location
 
     var body: some View {
-        ActionProposalSheet(model: seeded(), location: location)
+        ActionProposalSheet(
+            model: ActionProposalModel(opportunity: opportunity, location: location), location: location
+        )
     }
 
-    /// The model with the tiles' words already put in as chips.
-    private func seeded() -> ActionProposalModel {
-        let model = ActionProposalModel(opportunity: opportunity, location: location)
-        for word in opportunity.seedWords { _ = model.add(word) }
-        return model
-    }
 }

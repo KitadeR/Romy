@@ -107,15 +107,3 @@ extension TiredStrength {
         }
     }
 }
-
-extension ActionState {
-    /// Until the comparison of 25の3版 is built (段階5), the states open the proposal that already exists, as the
-    /// words it understands (`ActionIntake`). 「荷物が重い」 has no word there yet; it is used from 段階5.
-    static func bridgeWords(_ states: Set<ActionState>, strength: TiredStrength?) -> [String] {
-        var words: [String] = []
-        if states.contains(.tired) || states.contains(.wantSit) { words.append("カフェで休む") }
-        if states.contains(.hungry) { words.append("ごはんを食べる") }
-        if states.contains(.tired), let strength, strength >= .quite { words.append("あまり歩きたくない") }
-        return words
-    }
-}

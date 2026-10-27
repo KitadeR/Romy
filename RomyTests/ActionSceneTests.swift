@@ -147,6 +147,20 @@ struct ActionSceneTests {
         #expect(ways.first?.steps.first?.startMinutes == ways.first?.steps.first?.arriveMinutes)
     }
 
+    @Test func theWalkingCapUsesTheActualRouteNotTheStraightLineRadius() async {
+        let ways = await ActionScene.build(
+            input([.tired], strength: .very), search: search,
+            walking: { _, _ in 12 }
+        )
+        #expect(ways.isEmpty)
+    }
+
+    @Test func beingHungryIsNotLostWhenTheStayIsAlreadyOpen() async {
+        let ways = await ActionScene.build(input([.hungry], strength: nil, now: 930), search: search, walking: walking)
+        #expect(!ways.isEmpty)
+        #expect(ways.allSatisfy { $0.steps.contains { $0.kind == .eat } })
+    }
+
     @Test func aWayThatCannotReachDinnerIsKeptBehindTheOnesThatCan() {
         func way(_ reason: SceneWay.Reason, slack: Int, unknown: Bool = false) -> SceneWay {
             let step = SceneStep(

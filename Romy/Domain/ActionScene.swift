@@ -48,7 +48,7 @@ struct SceneWay: Equatable {
         }
     }
 
-    let reason: Reason
+    var reason: Reason
     let steps: [SceneStep]
     let walkMinutes: Int
     /// Sitting at a rest or a meal, and in the room after check-in: an estimate, seats are not checked.
@@ -139,7 +139,7 @@ enum ActionScene {
                 ]))
             }
         } else if let stay = input.stay {
-            plans.append((.stayNow, [Planned(.checkIn, stay.title, stay.place)]))
+            plans += openStayWays(input, stay: stay, seats: seatsHere)
         } else {
             let least = leastDetour(seatsHere, from: input.origin, to: input.next)
             for (index, place) in ordered(seatsHere, least: least).enumerated() {
@@ -152,9 +152,40 @@ enum ActionScene {
             let all = steps + [Planned(.next, input.nextTitle, input.next)]
             guard let way = await timed(reason, all, input: input, walking: walking), way.addedPlaces <= maxAdded
             else { continue }
+            // The radius only selects candidates. A river or station may make the actual walk much longer.
+            if let cap = input.strength?.oneWayCapMinutes,
+               way.steps.contains(where: { step in
+                   [.rest, .eat, .dropLuggage, .lockerDrop].contains(step.kind) && step.walkBeforeMinutes > cap
+               }) {
+                continue
+            }
             ways.append(way)
         }
+        nameLeastWalkingRest(&ways)
         return Array(order(ways, heavyLuggage: input.hasHeavyLuggage).prefix(waysShown))
+    }
+
+    private static func openStayWays(
+        _ input: SceneInput, stay: SceneInput.Stay, seats: [ProposalPlace]
+    ) -> [(SceneWay.Reason, [Planned])] {
+        if input.states.contains(.hungry) {
+            return ordered(seats, least: leastDetour(seats, from: input.origin, to: stay.place))
+                .enumerated().map { index, place in
+                    (index == 0 ? .leastWalk : .otherSeat, [
+                        Planned(.eat, place.name, place), Planned(.checkIn, stay.title, stay.place)
+                    ])
+                }
+        } else {
+            return [(.stayNow, [Planned(.checkIn, stay.title, stay.place)])]
+        }
+    }
+
+    private static func nameLeastWalkingRest(_ ways: inout [SceneWay]) {
+        // Name the least-walking rest using the actual route, not its straight-line shortlist position.
+        let restWays = ways.indices.filter { ways[$0].reason == .leastWalk || ways[$0].reason == .otherSeat }
+        if let least = restWays.min(by: { ways[$0].walkMinutes < ways[$1].walkMinutes }) {
+            for index in restWays { ways[index].reason = index == least ? .leastWalk : .otherSeat }
+        }
     }
 
     // MARK: - ③ Putting places into a way
