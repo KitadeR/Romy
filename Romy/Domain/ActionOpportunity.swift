@@ -14,6 +14,8 @@ struct ActionOpportunity: Identifiable {
     let nowMinutes: Int
     /// True when the next plan's time is fixed (it will not be moved); a guessed time follows the plans before it.
     let nextIsFixed: Bool
+    /// Words put in as chips when the proposal opens, from the emoji tiles (段階4); empty from the itinerary.
+    var seedWords: [String] = []
 
     var availableMinutes: Int { nextStartMinutes - nowMinutes }
 

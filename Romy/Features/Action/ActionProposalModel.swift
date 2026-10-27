@@ -49,7 +49,7 @@ final class ActionProposalModel {
 
     /// 「パンを買う」→「パン」: the noun of a chip, for a sentence like 「近くにパンは見つかりませんでした」.
     static func stem(_ text: String) -> String {
-        for suffix in ["を買う", "を食べる", "で食べる", "を探す", "に行く", "を見る"] where text.hasSuffix(suffix) {
+        for suffix in ["を買う", "を食べる", "で食べる", "で休む", "を探す", "に行く", "を見る"] where text.hasSuffix(suffix) {
             return String(text.dropLast(suffix.count))
         }
         return text

@@ -73,6 +73,11 @@ struct ActionHomeSheet: View {
     let onToggleDone: (ItineraryItem) -> Void
     let onAddPlans: () -> Void
 
+    /// The emoji tiles (段階4), then the proposal they open. The proposal waits for the tiles to close.
+    @State private var asking: AskRequest?
+    @State private var waitingProposal: ActionOpportunity?
+    @State private var proposing: ActionOpportunity?
+
     private let text = DateText(calendar: .current, holidays: .bundled)
 
     private var today: ActionToday? {
@@ -94,8 +99,8 @@ struct ActionHomeSheet: View {
                 }
                 if let today {
                     nowCard(today)
-                    if let now = today.now, let propose = actions.proposal(now.item) {
-                        AskCard(onTap: propose)
+                    if let now = today.now, let opportunity = actions.opportunity(now.item) {
+                        AskCard { asking = AskRequest(opportunity: opportunity, states: $0) }
                     }
                     if !today.remaining.isEmpty {
                         remaining(today)
@@ -113,6 +118,21 @@ struct ActionHomeSheet: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.surface.ignoresSafeArea())
         .task(id: trip.items.count) { await loadTravel() }
+        .sheet(item: $asking, onDismiss: openWaitingProposal) { request in
+            StateTilesSheet(initial: request.states) { states, strength in
+                var opportunity = request.opportunity
+                opportunity.seedWords = ActionState.bridgeWords(states, strength: strength)
+                waitingProposal = opportunity
+                asking = nil
+            }
+            .presentationDetents([.large])
+        }
+        .actionProposalSheet($proposing)
+    }
+
+    private func openWaitingProposal() {
+        proposing = waitingProposal
+        waitingProposal = nil
     }
 
     /// The day's travel times, so the times here match the itinerary's.
@@ -238,15 +258,22 @@ struct ActionHomeSheet: View {
     }
 }
 
-/// 「いまどうする？」 (Figma 26-01): right under the plan that is 今, with three states the person often has.
-/// Until the emoji tiles are built (段階4), it opens the proposal that already exists.
-private struct AskCard: View {
-    let onTap: () -> Void
+/// The tiles to open, with the states already chosen from the Home card's chips.
+private struct AskRequest: Identifiable {
+    let opportunity: ActionOpportunity
+    let states: Set<ActionState>
+    var id: UUID { opportunity.id }
+}
 
-    private static let chips = ["😮‍💨 疲れた", "🧳 荷物が重い", "🍙 お腹すいた"]
+/// 「いまどうする？」 (Figma 26-01): right under the plan that is 今, with three states the person often has. The card
+/// opens the emoji tiles; a chip opens them with that state chosen (疲れていても1タップ).
+private struct AskCard: View {
+    let onAsk: (Set<ActionState>) -> Void
+
+    private static let chips: [ActionState] = [.tired, .heavyLuggage, .hungry]
 
     var body: some View {
-        Button(action: onTap) {
+        Button { onAsk([]) } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("いまどうする？").font(Theme.jp(20, .bold))
@@ -257,11 +284,14 @@ private struct AskCard: View {
                     .font(Theme.jp(13, .medium))
                     .foregroundStyle(Theme.secondary)
                 HStack(spacing: 8) {
-                    ForEach(Self.chips, id: \.self) { chip in
-                        Text(chip).font(Theme.jp(13, .bold))
-                            .padding(.horizontal, 12)
-                            .frame(height: 34)
-                            .background(Capsule().fill(Theme.fill))
+                    ForEach(Self.chips, id: \.self) { state in
+                        Button { onAsk([state]) } label: {
+                            Text("\(state.emoji) \(state.label)").font(Theme.jp(13, .bold))
+                                .padding(.horizontal, 12)
+                                .frame(height: 34)
+                                .background(Capsule().fill(Theme.fill))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }

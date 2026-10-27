@@ -15,7 +15,7 @@ struct HomeActions {
     /// Action Home: open a plan's detail in the itinerary, and 「いまどうする？」 for the plan that is 今
     /// (nil where it is not offered).
     var openPlan: (UUID) -> Void = { _ in }
-    var proposal: (ItineraryItem) -> (() -> Void)? = { _ in nil }
+    var opportunity: (ItineraryItem) -> ActionOpportunity? = { _ in nil }
     /// True when the sheet is pulled to full height and the cover is hidden behind it.
     var isExpanded = false
 }

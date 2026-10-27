@@ -9,14 +9,14 @@ extension ItineraryView {
             .map { opportunity in { proposing = opportunity } }
     }
 
-    /// 「いまどうする？」 on the Action Home: the same proposal, for today's plan that is 今.
-    func homeProposal(for item: ItineraryItem) -> (() -> Void)? {
+    /// 「いまどうする？」 on the Action Home: the moment for today's plan that is 今, or nil where it is not offered.
+    func homeOpportunity(for item: ItineraryItem) -> ActionOpportunity? {
         guard let day = todayNumber else { return nil }
         let plans = trip.items(on: day)
         let schedule = trip.schedule(
             of: plans, on: .now, calendar: text.calendar, travelMinutes: { travel.minutes(from: $0, to: $1) }
         )
-        return suggestion(for: item, day: day, plans: plans, schedule: schedule)
+        return proposalOpportunity(for: item, day: day, plans: plans, schedule: schedule)
     }
 
     /// The proposal is offered on the plan that is 今, today, when a later plan has a place (Notion 02 §6-4).
@@ -48,8 +48,13 @@ private struct ActionProposalPresenter: View {
     @Environment(LocationProvider.self) private var location
 
     var body: some View {
-        ActionProposalSheet(
-            model: ActionProposalModel(opportunity: opportunity, location: location), location: location
-        )
+        ActionProposalSheet(model: seeded(), location: location)
+    }
+
+    /// The model with the tiles' words already put in as chips.
+    private func seeded() -> ActionProposalModel {
+        let model = ActionProposalModel(opportunity: opportunity, location: location)
+        for word in opportunity.seedWords { _ = model.add(word) }
+        return model
     }
 }

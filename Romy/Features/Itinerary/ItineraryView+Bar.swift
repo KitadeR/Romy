@@ -82,7 +82,7 @@ extension ItineraryView {
             pickPhoto: { isPickingPhoto = true },
             chooseDay: { choosingWish = $0 },
             openPlan: { detailID = $0 },
-            proposal: homeProposal(for:),
+            opportunity: homeOpportunity(for:),
             isExpanded: detent == .large
         )
     }

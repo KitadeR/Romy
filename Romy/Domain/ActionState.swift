@@ -83,3 +83,39 @@ enum TiredStrength: Int, CaseIterable, Comparable {
         }
     }
 }
+
+extension TiredStrength {
+    /// The words under the big emoji (Figma 26-03): 「けっこう疲れた」.
+    var phrase: String {
+        switch self {
+        case .little: "少し疲れた"
+        case .quite: "けっこう疲れた"
+        case .very: "かなり疲れた"
+        case .cannotWalk: "もう歩けない"
+        }
+    }
+
+    /// Each step up is felt once, stronger the higher it goes (Figma 26-03・04): the weight (light, medium, heavy) and
+    /// intensity (0 to 1) of `SensoryFeedback.impact(weight:intensity:)`
+    /// (SwiftUI, iOS 17; checked in the SDK 2026-10-27).
+    var impact: (weight: Int, intensity: Double) {
+        switch self {
+        case .little: (0, 0.5)
+        case .quite: (1, 0.7)
+        case .very: (2, 0.85)
+        case .cannotWalk: (2, 1.0)
+        }
+    }
+}
+
+extension ActionState {
+    /// Until the comparison of 25の3版 is built (段階5), the states open the proposal that already exists, as the
+    /// words it understands (`ActionIntake`). 「荷物が重い」 has no word there yet; it is used from 段階5.
+    static func bridgeWords(_ states: Set<ActionState>, strength: TiredStrength?) -> [String] {
+        var words: [String] = []
+        if states.contains(.tired) || states.contains(.wantSit) { words.append("カフェで休む") }
+        if states.contains(.hungry) { words.append("ごはんを食べる") }
+        if states.contains(.tired), let strength, strength >= .quite { words.append("あまり歩きたくない") }
+        return words
+    }
+}
