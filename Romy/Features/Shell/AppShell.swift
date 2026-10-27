@@ -171,9 +171,11 @@ struct AppShell: View {
     }
 
     /// The heights the sheet rests at on each tab other than the itinerary; the first is where it opens.
+    /// Home opens at the itinerary's middle height, as 「行きたい」 does: a height the itinerary does not have
+    /// made the sheet dip to the bottom before rising when going between Home and the itinerary.
     private var otherDetents: [PresentationDetent] {
         switch tab {
-        case .home: [.fraction(0.65), .large]
+        case .home: [SheetHeights.middle, .large]
         case .wishlist: [SheetHeights.middle, SheetHeights.small, SheetHeights.low, .large]
         case .itinerary, .preparation: [.large]
         }
