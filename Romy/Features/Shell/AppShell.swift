@@ -68,9 +68,13 @@ struct AppShell: View {
     /// Travel times between plans; kept here so they stay when the tab changes.
     @State private var travel = TravelTimes()
 
-    /// 旅程の日のタブからはその日、それ以外は未定 (Notion 02 §6-6 「入れる日」). Action's 「今日」 comes with the Action Home.
+    /// 旅程の日のタブからはその日、ActionのHomeからは今日、それ以外は未定 (Notion 02 §6-6 「入れる日」).
     private var dayForNewPlan: Int? {
-        tab == .itinerary ? itineraryTab.dayForNewPlan : nil
+        switch tab {
+        case .itinerary: itineraryTab.dayForNewPlan
+        case .home: actionDay
+        case .wishlist, .preparation: nil
+        }
     }
 
     var body: some View {
@@ -113,6 +117,14 @@ struct AppShell: View {
     @ViewBuilder
     private func otherTab(_ actions: HomeActions) -> some View {
         switch tab {
+        case .home where actionDay != nil:
+            ActionHomeSheet(
+                trip: trip,
+                actions: openingItinerary(actions),
+                travel: travel,
+                onToggleDone: toggleDone,
+                onAddPlans: { sheet = .plan(day: actionDay) }
+            )
         case .home:
             PlanHomeSheet(
                 trip: trip,
@@ -130,6 +142,24 @@ struct AppShell: View {
         case .itinerary:
             EmptyView()
         }
+    }
+
+    /// The day of the trip that today is, when the trip is in Action; the Action Home is shown then
+    /// (Notion 02 §6-4, 2026-10-27). The day before the trip keeps Plan Home: its Action form was about the Shinkansen.
+    private var actionDay: Int? {
+        guard TripPhase(dates: trip.dates, today: .now) == .action else { return nil }
+        return trip.dates.dayNumber(on: .now)
+    }
+
+    /// Opening a plan from the Action Home goes to today's tab of the itinerary with the plan's detail open.
+    private func openingItinerary(_ actions: HomeActions) -> HomeActions {
+        var opening = actions
+        opening.openPlan = { id in
+            if let day = actionDay { itineraryTab = .day(day) }
+            actions.openPlan(id)
+            tab = .itinerary
+        }
+        return opening
     }
 
     private func wishlist(_ actions: HomeActions) -> some View {
@@ -152,7 +182,9 @@ struct AppShell: View {
     /// What stands behind the sheet where the itinerary has its map: Home's cover, or nothing.
     @ViewBuilder
     private func cover(_ actions: HomeActions) -> some View {
-        if tab == .home {
+        if tab == .home, actionDay != nil {
+            ActionHomeCover(trip: trip, actions: actions)
+        } else if tab == .home {
             PlanHomeCover(trip: trip, actions: actions)
         } else if tab == .wishlist {
             WishlistMap(trip: trip)

@@ -9,6 +9,16 @@ extension ItineraryView {
             .map { opportunity in { proposing = opportunity } }
     }
 
+    /// 「いまどうする？」 on the Action Home: the same proposal, for today's plan that is 今.
+    func homeProposal(for item: ItineraryItem) -> (() -> Void)? {
+        guard let day = todayNumber else { return nil }
+        let plans = trip.items(on: day)
+        let schedule = trip.schedule(
+            of: plans, on: .now, calendar: text.calendar, travelMinutes: { travel.minutes(from: $0, to: $1) }
+        )
+        return suggestion(for: item, day: day, plans: plans, schedule: schedule)
+    }
+
     /// The proposal is offered on the plan that is 今, today, when a later plan has a place (Notion 02 §6-4).
     private func proposalOpportunity(
         for item: ItineraryItem, day: Int?, plans: [ItineraryItem], schedule: DaySchedule
