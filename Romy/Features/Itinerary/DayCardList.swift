@@ -56,7 +56,12 @@ struct DayCardList: View {
             let fraction = schedule?.slot(for: item.id)?.progress(at: nowMinutes) ?? 0
             return TimeLineStyle(progress.state(of: item.id), color: color, fraction: fraction)
         }
+        // A stay's other days: 「ホテルを出る」 first, 「2泊目」 last (Notion 02 §6-5 決定 2026-10-28).
+        let stayLines = day.map { trip.stayLines(on: $0) } ?? (leaving: [], nights: [])
         return VStack(spacing: 6) {
+            ForEach(stayLines.leaving) { line in
+                StayLineRow(line: line, startMinutes: trip.dayStartMinutes) { onOpen(line.stay) }
+            }
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 // While a card is carried over the others, the moves between them step aside (Notion 05).
                 if index > 0, !isCarrying {
@@ -77,16 +82,22 @@ struct DayCardList: View {
                 .onTapGesture { onOpen(item) }
                 // Long press lifts the card; dropping it on another plan puts it in that plan's place.
                 .draggable(item.id.uuidString)
-                .dropDestination(for: String.self) { ids, _ in
-                    guard let id = ids.first, let dragged = trip.items.first(where: { $0.id.uuidString == id }) else {
-                        return false
-                    }
-                    withAnimation(.snappy) { trip.reorder(dragged, onto: item) }
-                    return true
-                } isTargeted: { isTargeted in
+                .dropDestination(for: String.self) { ids, _ in drop(ids, onto: item) } isTargeted: { isTargeted in
                     withAnimation(.snappy) { carried = isTargeted ? item.id : (carried == item.id ? nil : carried) }
                 }
             }
+            ForEach(stayLines.nights) { line in
+                StayLineRow(line: line, startMinutes: nil) { onOpen(line.stay) }
+            }
         }
+    }
+
+    /// Dropping a carried card on another plan puts it in that plan's place.
+    private func drop(_ ids: [String], onto item: ItineraryItem) -> Bool {
+        guard let id = ids.first, let dragged = trip.items.first(where: { $0.id.uuidString == id }) else {
+            return false
+        }
+        withAnimation(.snappy) { trip.reorder(dragged, onto: item) }
+        return true
     }
 }

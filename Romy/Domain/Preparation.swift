@@ -48,7 +48,9 @@ struct Preparation {
         phase = Self.phase(of: trip.dates, now: now, calendar: calendar)
         if case .day(let day) = phase {
             let nowMinutes = Trip.minutes(of: now, on: now, calendar: calendar) ?? 0
-            checks = Self.checks(trip.items(on: day), nowMinutes: nowMinutes)
+            checks = Self.checks(
+                trip.items(on: day), nowMinutes: nowMinutes, leaving: !trip.stayLines(on: day).leaving.isEmpty
+            )
         } else {
             checks = []
         }
@@ -62,10 +64,11 @@ struct Preparation {
         return [day + time, item.kind.label].compactMap { $0 }.joined(separator: " ・ ")
     }
 
-    /// The black card's words: 「宿を予約する」, 「お店を予約する」, otherwise 「予約する」.
+    /// The black card's words: 「宿を予約する」 (「宿を決める」 for a stay decided later), 「お店を予約する」, otherwise
+    /// 「予約する」.
     static func bookTitle(of item: ItineraryItem) -> String {
         switch item.kind {
-        case .stay: "宿を予約する"
+        case .stay: item.stayKind == .later ? "宿を決める" : "宿を予約する"
         case .food: "お店を予約する"
         default: "予約する"
         }
@@ -99,9 +102,10 @@ struct Preparation {
         }
     }
 
-    /// The day's check-ins and fixed times still ahead, by time. While a stay has not opened yet the luggage has no
-    /// checked place, so it says 「？」 rather than guessing (Notion 02 §6-4).
-    static func checks(_ plans: [ItineraryItem], nowMinutes: Int) -> [Check] {
+    /// The day's check-ins and fixed times still ahead, by time. While a stay has not opened yet, or after leaving a
+    /// stay with plans still to go, the luggage has no checked place, so it says 「？」 rather than guessing
+    /// (Notion 02 §6-4, §6-5 決定 2026-10-28 チェックアウト後の荷物).
+    static func checks(_ plans: [ItineraryItem], nowMinutes: Int, leaving: Bool = false) -> [Check] {
         var checks: [Check] = []
         for plan in plans where plan.doneAt == nil {
             if plan.kind == .stay, let opens = plan.notBeforeMinutes {
@@ -114,7 +118,10 @@ struct Preparation {
             }
         }
         checks.sort { ($0.minutes ?? 0) < ($1.minutes ?? 0) }
-        if plans.contains(where: { $0.kind == .stay && $0.doneAt == nil && ($0.notBeforeMinutes ?? 0) > nowMinutes }) {
+        let waitsForStay = plans.contains {
+            $0.kind == .stay && $0.doneAt == nil && ($0.notBeforeMinutes ?? 0) > nowMinutes
+        }
+        if waitsForStay || (leaving && plans.contains { $0.doneAt == nil }) {
             checks.append(Check(kind: .luggage, minutes: nil, title: "荷物の預け先は未確認", isBooked: nil))
         }
         return checks

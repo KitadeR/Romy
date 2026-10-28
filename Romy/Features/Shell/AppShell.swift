@@ -30,9 +30,11 @@ struct AppShell: View {
         }
     }
 
-    /// What the ＋ opens (Notion 02 §6-6). 移動 and 宿 are built next; until then they say so.
+    /// What the ＋ opens (Notion 02 §6-6). 移動 is built next; until then it says so.
     enum AddSheet: Identifiable {
         case plan(day: Int?)
+        /// 「宿を追加」 (Figma 15-7・15-8).
+        case stay(day: Int?)
         /// Search a place to save with ♥ in 「行きたい」.
         case wish
         case comingSoon(String)
@@ -40,6 +42,7 @@ struct AppShell: View {
         var id: String {
             switch self {
             case .plan(let day): "plan-\(day ?? 0)"
+            case .stay(let day): "stay-\(day ?? 0)"
             case .wish: "wish"
             case .comingSoon(let title): title
             }

@@ -13,10 +13,11 @@ struct ActionToday {
     let now: Row?
     /// The plans after 今 that are not 済み, in order.
     let remaining: [Row]
-    /// Tonight's stay: the last stay of the day, shown even when it is 今 or already 済み.
+    /// Tonight's stay, shown even when it is 今 or already 済み: the stay of tonight's night, also on a middle night of
+    /// it (Notion 02 §6-5 決定 2026-10-28). Without one given, the last stay of the day.
     let stay: ItineraryItem?
 
-    init(plans: [ItineraryItem], day: Int, schedule: DaySchedule) {
+    init(plans: [ItineraryItem], day: Int, schedule: DaySchedule, stay: ItineraryItem? = nil) {
         self.day = day
         let progress = DayProgress(
             plans: plans.map { DayProgress.Input(id: $0.id, isDone: $0.doneAt != nil) }, isToday: true
@@ -24,7 +25,7 @@ struct ActionToday {
         let rows = plans.compactMap { item in schedule.slot(for: item.id).map { Row(item: item, slot: $0) } }
         now = rows.first { progress.state(of: $0.item.id) == .now }
         remaining = rows.filter { progress.state(of: $0.item.id) == .upcoming }
-        stay = plans.last { $0.kind == .stay }
+        self.stay = stay ?? plans.last { $0.kind == .stay }
     }
 
     /// 「京都市東山区」→「東山区」: the big name is the ward, or the city when there is none (Notion 02 §6-4,

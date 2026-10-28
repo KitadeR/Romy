@@ -36,7 +36,15 @@ struct PlanDetailView: View {
     /// The 「予約が要る」 switch of a plan that is not a stay.
     var onSetBookingNeeded: (Bool) -> Void = { _ in }
 
-    private var awaitsBooking: Bool { item.needsBooking && item.bookedAt == nil }
+    /// A stay decided later has nothing to book yet; its place is chosen in 宿の決まり.
+    private var awaitsBooking: Bool {
+        item.needsBooking && item.bookedAt == nil && !(item.kind == .stay && item.stayKind == .later)
+    }
+
+    /// The trip's days, for the date a stay is left.
+    private var stayDays: ItineraryDays {
+        ItineraryDays(dates: item.trip?.dates ?? .undecided, text: DateText(calendar: .current, holidays: .bundled))
+    }
 
     private var hasPlace: Bool {
         item.latitude != nil && item.longitude != nil
@@ -51,7 +59,7 @@ struct PlanDetailView: View {
                     VStack(spacing: 12) {
                         PlanPhotoCard(item: item)
                         timeCard
-                        if item.kind == .stay { StayCheckInCard(item: item) }
+                        if item.kind == .stay { StayRulesCard(item: item, days: stayDays) }
                         bookingCard
                         suggestCard
                         placeCard

@@ -93,7 +93,7 @@ struct ActionHomeSheet: View {
         let schedule = trip.schedule(
             of: plans, on: .now, calendar: text.calendar, travelMinutes: { travel.minutes(from: $0, to: $1) }
         )
-        return ActionToday(plans: plans, day: day, schedule: schedule)
+        return ActionToday(plans: plans, day: day, schedule: schedule, stay: trip.stayTonight(on: day))
     }
 
     var body: some View {

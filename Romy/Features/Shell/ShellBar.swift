@@ -34,7 +34,7 @@ struct ShellBar: View {
     private var menuItems: [MenuItem] {
         [
             MenuItem(id: "stay", title: "宿", detail: "どこに泊まる？", symbol: "bed.double",
-                     sheet: .comingSoon("宿を追加")),
+                     sheet: .stay(day: dayForNewPlan)),
             MenuItem(id: "move", title: "移動", detail: "新幹線・そのほか", symbol: "tram",
                      sheet: .comingSoon("移動を追加")),
             MenuItem(id: "plan", title: "行きたい所・予定", detail: "場所を探す・名前だけでも",
@@ -88,6 +88,9 @@ struct ShellBar: View {
                     .presentationDetents([.large])
             case .wish:
                 AddPlanSheet(trip: trip)
+                    .presentationDetents([.large])
+            case .stay(let day):
+                AddStaySheet(trip: trip, day: day, onAdded: onAdded)
                     .presentationDetents([.large])
             case .comingSoon(let title):
                 ComingSoonView(title: title)

@@ -172,13 +172,17 @@ struct PreparationView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Button { onBook(item) } label: {
-                Text("予約完了にする").font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink)
+            Button { decidesLater(item) ? onOpen(item) : onBook(item) } label: {
+                Text(decidesLater(item) ? "宿を決める" : "予約完了にする").font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 44).background(Capsule().fill(.white))
             }
             .buttonStyle(.plain)
         }
     }
+
+    /// A stay decided later has no place to book yet: its button opens the stay to choose one (Notion 02 §6-5 決定
+    /// 2026-10-28 宿の種類).
+    private func decidesLater(_ item: ItineraryItem) -> Bool { item.kind == .stay && item.stayKind == .later }
 
     private func pendingCard(_ item: ItineraryItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -193,10 +197,11 @@ struct PreparationView: View {
             }
             .buttonStyle(.plain)
             HStack {
-                Text("予約：まだ").font(Theme.jp(13, .medium)).foregroundStyle(Theme.ink)
+                Text(decidesLater(item) ? "宿：まだ決めていない" : "予約：まだ").font(Theme.jp(13, .medium))
+                    .foregroundStyle(Theme.ink)
                 Spacer()
-                Button { onBook(item) } label: {
-                    Text("予約完了にする").font(Theme.jp(14, .bold)).foregroundStyle(Theme.ink)
+                Button { decidesLater(item) ? onOpen(item) : onBook(item) } label: {
+                    Text(decidesLater(item) ? "宿を決める" : "予約完了にする").font(Theme.jp(14, .bold)).foregroundStyle(Theme.ink)
                         .padding(.horizontal, 16).frame(minHeight: 44)
                         .overlay(Capsule().strokeBorder(Theme.ink, lineWidth: 1.5))
                 }

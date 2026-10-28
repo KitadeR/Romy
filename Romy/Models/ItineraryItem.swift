@@ -38,6 +38,14 @@ final class ItineraryItem {
     var bookingNeeded: Bool?
     /// When the person marked the booking done (「予約完了にする」); nil while it is not booked.
     var bookedAt: Date?
+    /// A stay's nights from its day (Notion 02 §6-5 決定 2026-10-28 何泊の持ち方); nil means one night (`nights`).
+    var nightsCount: Int?
+    /// A stay's チェックアウト, in minutes after midnight on the day it is left; nil while not known.
+    var checkOutMinutes: Int?
+    /// A stay's 最終チェックイン, in minutes after midnight; nil while not known (it is optional).
+    var lastCheckInMinutes: Int?
+    /// What kind of stay it is (`StayKind`); nil for a stay found by search, which is a hotel.
+    var stayKindRaw: String?
     /// How the person goes from the plan before to this one, when they chose it (Notion 02 §6-5 ②移動の行);
     /// nil means the first guess (`TravelMode.defaultMode`).
     var travelModeRaw: String?
@@ -80,8 +88,9 @@ final class ItineraryItem {
         set { travelModeRaw = newValue?.rawValue }
     }
 
-    /// Listed in 準備 with 「予約：まだ／済み」: a stay always, any other plan once the person said it needs booking.
-    var needsBooking: Bool { kind == .stay || bookingNeeded == true }
+    /// Listed in 準備 with 「予約：まだ／済み」: a stay unless it is a friend's house, any other plan once the person
+    /// said it needs booking (Notion 02 §6-5 決定 2026-10-28 宿の種類).
+    var needsBooking: Bool { kind == .stay ? stayKind != .friend : bookingNeeded == true }
 }
 
 /// The broad kind shown as the small label on a card (「観光」「食事」).
@@ -197,6 +206,10 @@ struct ItineraryItemSnapshot {
     let photo: Data?
     var bookingNeeded: Bool?
     var bookedAt: Date?
+    var nightsCount: Int?
+    var checkOutMinutes: Int?
+    var lastCheckInMinutes: Int?
+    var stayKindRaw: String?
 }
 
 extension ItineraryItem {
@@ -206,7 +219,9 @@ extension ItineraryItem {
             latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
             durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes,
             notBeforeMinutes: notBeforeMinutes, doneAt: doneAt,
-            travelModeRaw: travelModeRaw, photo: photo, bookingNeeded: bookingNeeded, bookedAt: bookedAt
+            travelModeRaw: travelModeRaw, photo: photo, bookingNeeded: bookingNeeded, bookedAt: bookedAt,
+            nightsCount: nightsCount, checkOutMinutes: checkOutMinutes, lastCheckInMinutes: lastCheckInMinutes,
+            stayKindRaw: stayKindRaw
         )
     }
 
@@ -228,6 +243,10 @@ extension ItineraryItem {
         item.photo = snapshot.photo
         item.bookingNeeded = snapshot.bookingNeeded
         item.bookedAt = snapshot.bookedAt
+        item.nightsCount = snapshot.nightsCount
+        item.checkOutMinutes = snapshot.checkOutMinutes
+        item.lastCheckInMinutes = snapshot.lastCheckInMinutes
+        item.stayKindRaw = snapshot.stayKindRaw
         return item
     }
 }

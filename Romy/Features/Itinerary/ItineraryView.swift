@@ -341,6 +341,7 @@ extension ItineraryView {
                 Text(title).font(Theme.jp(14, .bold)).foregroundStyle(Theme.ink)
             }
             if items.isEmpty {
+                staysOnly(day)
                 addBox("追加", day: day)
             } else {
                 cards(items, day: day)
@@ -352,10 +353,19 @@ extension ItineraryView {
     private func dayList(_ day: Int?, emptyLabel: String) -> some View {
         let items = trip.items(on: day)
         if items.isEmpty {
-            addBox(emptyLabel, day: day)
+            VStack(spacing: 10) {
+                staysOnly(day)
+                addBox(emptyLabel, day: day)
+            }
         } else {
             cards(items, day: day)
         }
+    }
+
+    /// A day without plans still shows a stay's 「ホテルを出る」 or 「2泊目」 (Notion 02 §6-5 決定 2026-10-28).
+    @ViewBuilder
+    private func staysOnly(_ day: Int?) -> some View {
+        if let day, trip.hasStayLines(on: day) { cards([], day: day) }
     }
 
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {
