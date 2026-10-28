@@ -105,5 +105,7 @@ struct PlanHomeGlanceTests {
         #expect(PlanHomeGlance.bookTitle(of: inn) == "2日目の宿を予約する")
         inn.stayKind = .later
         #expect(PlanHomeGlance.bookTitle(of: inn) == "2日目の宿を決める")
+        #expect(PlanHomeGlance.bookTitle(of: add("祇園", day: 1, to: day)) == "祇園を予約する")
+        #expect(PlanHomeGlance.bookTitle(of: add("割烹", day: 1, kind: .food, to: day)) == "1日目のお店を予約する")
     }
 }

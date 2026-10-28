@@ -57,9 +57,10 @@ enum PlanHomeGlance {
         return Eve(place: place, first: lines.first, rest: Array(lines.dropFirst()))
     }
 
-    /// The white button: 「2日目の宿を予約する」.
+    /// The white button: 「2日目の宿を予約する」, 「1日目のお店を予約する」; any other plan by its name, 「Gionを予約する」.
     static func bookTitle(of item: ItineraryItem) -> String {
-        (item.day.map { "\($0)日目の" } ?? "") + Preparation.bookTitle(of: item)
+        guard item.kind == .stay || item.kind == .food else { return "\(item.title)を予約する" }
+        return (item.day.map { "\($0)日目の" } ?? "") + Preparation.bookTitle(of: item)
     }
 
     private static func line(_ plan: ItineraryItem, startMinutes: Int) -> String {
