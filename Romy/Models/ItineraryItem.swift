@@ -26,12 +26,31 @@ final class ItineraryItem {
     var durationMinutes: Int = 60
     /// Start fixed by the person (鍵), in minutes after midnight; nil while the start is a guess (目安).
     var fixedStartMinutes: Int?
+    /// The earliest the plan can start, in minutes after midnight (a stay's check-in 「15:00から」); nil when any
+    /// time is fine. Unlike a fixed start the plan may start later; a guess that comes earlier waits until then
+    /// (Notion 02 §6-4, 2026-10-22: 「この時刻より前は不可」 is its own kind, apart from a fixed time).
+    var notBeforeMinutes: Int?
     /// When the person marked the plan 済み (Notion 02 §6-5 「済みを付ける・外す」); nil while it is not done.
     /// 今 and スキップ are not stored; they come from the order of the plans (`DayProgress`).
     var doneAt: Date?
+    /// Whether the plan needs booking (Notion 02 §6-3, 2026-10-27 「予約：まだ」を出す予定): nil until asked.
+    /// A stay needs it without being asked (`needsBooking`).
+    var bookingNeeded: Bool?
+    /// When the person marked the booking done (「予約完了にする」); nil while it is not booked.
+    var bookedAt: Date?
+    /// A stay's nights from its day (Notion 02 §6-5 決定 2026-10-28 何泊の持ち方); nil means one night (`nights`).
+    var nightsCount: Int?
+    /// A stay's チェックアウト, in minutes after midnight on the day it is left; nil while not known.
+    var checkOutMinutes: Int?
+    /// A stay's 最終チェックイン, in minutes after midnight; nil while not known (it is optional).
+    var lastCheckInMinutes: Int?
+    /// What kind of stay it is (`StayKind`); nil for a stay found by search, which is a hotel.
+    var stayKindRaw: String?
     /// How the person goes from the plan before to this one, when they chose it (Notion 02 §6-5 ②移動の行);
     /// nil means the first guess (`TravelMode.defaultMode`).
     var travelModeRaw: String?
+    /// Photo the person chose for the plan (shown on its card and at the top of its detail); nil until chosen.
+    @Attribute(.externalStorage) var photo: Data?
     var trip: Trip?
 
     init(
@@ -68,6 +87,10 @@ final class ItineraryItem {
         get { travelModeRaw.flatMap(TravelMode.init(rawValue:)) }
         set { travelModeRaw = newValue?.rawValue }
     }
+
+    /// Listed in 準備 with 「予約：まだ／済み」: a stay unless it is a friend's house, any other plan once the person
+    /// said it needs booking (Notion 02 §6-5 決定 2026-10-28 宿の種類).
+    var needsBooking: Bool { kind == .stay ? stayKind != .friend : bookingNeeded == true }
 }
 
 /// The broad kind shown as the small label on a card (「観光」「食事」).
@@ -177,8 +200,16 @@ struct ItineraryItemSnapshot {
     let createdAt: Date
     let durationMinutes: Int
     let fixedStartMinutes: Int?
+    let notBeforeMinutes: Int?
     let doneAt: Date?
     let travelModeRaw: String?
+    let photo: Data?
+    var bookingNeeded: Bool?
+    var bookedAt: Date?
+    var nightsCount: Int?
+    var checkOutMinutes: Int?
+    var lastCheckInMinutes: Int?
+    var stayKindRaw: String?
 }
 
 extension ItineraryItem {
@@ -186,8 +217,11 @@ extension ItineraryItem {
         ItineraryItemSnapshot(
             id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
             latitude: latitude, longitude: longitude, placeID: placeID, createdAt: createdAt,
-            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes, doneAt: doneAt,
-            travelModeRaw: travelModeRaw
+            durationMinutes: durationMinutes, fixedStartMinutes: fixedStartMinutes,
+            notBeforeMinutes: notBeforeMinutes, doneAt: doneAt,
+            travelModeRaw: travelModeRaw, photo: photo, bookingNeeded: bookingNeeded, bookedAt: bookedAt,
+            nightsCount: nightsCount, checkOutMinutes: checkOutMinutes, lastCheckInMinutes: lastCheckInMinutes,
+            stayKindRaw: stayKindRaw
         )
     }
 
@@ -203,8 +237,16 @@ extension ItineraryItem {
         item.kindRaw = snapshot.kindRaw
         item.durationMinutes = snapshot.durationMinutes
         item.fixedStartMinutes = snapshot.fixedStartMinutes
+        item.notBeforeMinutes = snapshot.notBeforeMinutes
         item.doneAt = snapshot.doneAt
         item.travelModeRaw = snapshot.travelModeRaw
+        item.photo = snapshot.photo
+        item.bookingNeeded = snapshot.bookingNeeded
+        item.bookedAt = snapshot.bookedAt
+        item.nightsCount = snapshot.nightsCount
+        item.checkOutMinutes = snapshot.checkOutMinutes
+        item.lastCheckInMinutes = snapshot.lastCheckInMinutes
+        item.stayKindRaw = snapshot.stayKindRaw
         return item
     }
 }

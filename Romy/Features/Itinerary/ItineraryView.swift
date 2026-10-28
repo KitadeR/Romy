@@ -9,8 +9,8 @@ import SwiftUI
 struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let trip: Trip
     @Binding var selection: ItineraryTab
-    /// The plan just added; its card is outlined for a moment (Figma 15-9).
-    let highlighted: UUID?
+    /// The plans just added; their cards are outlined for a moment (Figma 15-9, 27).
+    let highlighted: Set<UUID>
     /// The ＋ menu needs room above the bar, so the sheet rises to the middle height when it opens.
     let isShowingAddMenu: Bool
     /// True while the itinerary tab is chosen; on the other tabs the same sheet shows `other` at full height.
@@ -21,6 +21,8 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let onAdd: (Int?) -> Void
     /// Marks a plan 済み, or takes the mark off; the shell offers 「元に戻す」.
     let onToggleDone: (ItineraryItem) -> Void
+    /// 「予約完了にする」, or back to 「予約：まだ」; the shell offers 「元に戻す」.
+    let onToggleBooked: (ItineraryItem) -> Void
     /// The travel times between plans (MapKit), kept while the app runs.
     let travel: TravelTimes
     /// Deletes a plan; the shell offers 「元に戻す」.
@@ -48,7 +50,12 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     @State private var createAfterTrips = false
     @State var isAddingDestinations = false
     @State private var editingTime: EditingTime?
+    /// 「予約が要る？」, asked once after a plan first gets a fixed time (Notion 02 §6-3, 2026-10-27); it waits for the
+    /// time sheet to close.
+    @State var bookingQuestion: ItineraryItem?
+    @State var askingBooking: ItineraryItem?
     @State private var moving: ItineraryItem?
+    @State var proposing: ActionOpportunity?
     /// The plan whose detail is open (Notion 02 §6-6); nil shows the itinerary.
     @State var detailID: UUID?
 
@@ -70,12 +77,12 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
 
     private static var middle: PresentationDetent { SheetHeights.middle }
 
-    private let text = DateText(calendar: .current, holidays: .bundled)
+    let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
-    private var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
+    var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
     /// The day of the trip that today is; 今 and スキップ exist only there.
-    private var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
+    var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
     var detailItem: ItineraryItem? {
         detailID.flatMap { id in trip.items.first { $0.id == id } }
     }
@@ -144,13 +151,12 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             MoveSheet(trip: trip, item: item)
                 .presentationDetents([.large])
         }
-        .sheet(item: $editingTime) { editing in
-            TimeSheet(item: editing.item, slot: editing.slot) { duration, fixed in
-                editing.item.durationMinutes = duration
-                editing.item.fixedStartMinutes = fixed
-            }
+        .actionProposalSheet($proposing)
+        .sheet(item: $editingTime, onDismiss: askBookingAfterTime) { editing in
+            TimeSheet(item: editing.item, slot: editing.slot) { saveTime(editing.item, duration: $0, fixed: $1) }
             .presentationDetents([.large])
         }
+        .bookingQuestion($askingBooking)
         .sheet(isPresented: $isDecidingDates) {
             DecideDatesSheet(trip: trip)
                 .presentationDetents([.large])
@@ -188,10 +194,11 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
         let dayCount = ItineraryDays.count(of: trip.dates)
         let day = ItineraryDays.placement(of: item.day, dayCount: dayCount)
         let plans = trip.items(on: day)
-        let slot = day == nil ? nil : trip.schedule(
+        let schedule = day == nil ? nil : trip.schedule(
             of: plans, on: days.date(of: day), calendar: text.calendar,
             travelMinutes: { travel.minutes(from: $0, to: $1) }
-        ).slot(for: item.id)
+        )
+        let slot = schedule?.slot(for: item.id)
         return PlanDetailView(
             item: item,
             number: (plans.firstIndex { $0.id == item.id } ?? 0) + 1,
@@ -206,25 +213,15 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             onMove: { moving = item },
             onSendToUndecided: { withAnimation(.snappy) { trip.move(item, toDay: nil) } },
             onRoute: { openRoute(to: item) },
+            onSuggest: suggestion(for: item, day: day, plans: plans, schedule: schedule),
             onToggleDone: { onToggleDone(item) },
             onDelete: {
                 detailID = nil
                 onDelete(item)
-            }
+            },
+            onToggleBooked: { onToggleBooked(item) },
+            onSetBookingNeeded: { item.bookingNeeded = $0 }
         )
-    }
-
-    /// Opens a plan's detail; it needs room, so a small sheet rises to the middle height.
-    private func openDetail(_ item: ItineraryItem) {
-        // The map has to stay in view: from the small or the large height the detail comes to the middle.
-        withAnimation(.snappy) {
-            detailID = item.id
-            detent = Self.middle
-        }
-    }
-
-    func openDetail(id: UUID) {
-        if let item = trip.items.first(where: { $0.id == id }) { openDetail(item) }
     }
 
     /// 経路 opens the route (Apple Maps or Google Maps) from the plan before (Plan) or from where the person is (Action).
@@ -344,6 +341,7 @@ extension ItineraryView {
                 Text(title).font(Theme.jp(14, .bold)).foregroundStyle(Theme.ink)
             }
             if items.isEmpty {
+                staysOnly(day)
                 addBox("追加", day: day)
             } else {
                 cards(items, day: day)
@@ -355,10 +353,19 @@ extension ItineraryView {
     private func dayList(_ day: Int?, emptyLabel: String) -> some View {
         let items = trip.items(on: day)
         if items.isEmpty {
-            addBox(emptyLabel, day: day)
+            VStack(spacing: 10) {
+                staysOnly(day)
+                addBox(emptyLabel, day: day)
+            }
         } else {
             cards(items, day: day)
         }
+    }
+
+    /// A day without plans still shows a stay's 「ホテルを出る」 or 「2泊目」 (Notion 02 §6-5 決定 2026-10-28).
+    @ViewBuilder
+    private func staysOnly(_ day: Int?) -> some View {
+        if let day, trip.hasStayLines(on: day) { cards([], day: day) }
     }
 
     private func cards(_ items: [ItineraryItem], day: Int?) -> some View {

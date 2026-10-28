@@ -7,6 +7,7 @@ import Foundation
 /// again from now (Notion 02 §6-5 「目安の時刻は済みになるたびに今の時刻から計算し直す」).
 /// The travel time to a plan from the one before it is counted before its start (Notion 02 §6-5 ③); a fixed
 /// start does not move, and being late for it gives no warning.
+/// A plan that cannot start before a time (a stay's 「15:00から」) waits for it when the guess is earlier.
 struct DaySchedule {
     struct Slot: Equatable {
         let id: UUID
@@ -31,6 +32,8 @@ struct DaySchedule {
         var finishedAtMinutes: Int?
         /// Minutes of travel from the plan before; 0 for the first plan and while the time is not known.
         var travelBeforeMinutes = 0
+        /// A guessed start earlier than this waits until then (a stay's check-in).
+        var notBeforeMinutes: Int?
     }
 
     let slots: [Slot]
@@ -38,7 +41,8 @@ struct DaySchedule {
     init(dayStartMinutes: Int, plans: [Input]) {
         var cursor = dayStartMinutes
         slots = plans.map { plan in
-            let start = plan.fixedStartMinutes ?? (cursor + plan.travelBeforeMinutes)
+            let arrival = cursor + plan.travelBeforeMinutes
+            let start = plan.fixedStartMinutes ?? max(arrival, plan.notBeforeMinutes ?? arrival)
             let end = start + max(plan.durationMinutes, 5)
             cursor = plan.finishedAtMinutes ?? end
             return Slot(id: plan.id, startMinutes: start, endMinutes: end, isFixed: plan.fixedStartMinutes != nil)
@@ -70,7 +74,8 @@ extension Trip {
                 DaySchedule.Input(
                     id: plan.id, durationMinutes: plan.durationMinutes, fixedStartMinutes: plan.fixedStartMinutes,
                     finishedAtMinutes: Self.minutes(of: plan.doneAt, on: dayDate, calendar: calendar),
-                    travelBeforeMinutes: index > 0 ? travelMinutes(plans[index - 1], plan) : 0
+                    travelBeforeMinutes: index > 0 ? travelMinutes(plans[index - 1], plan) : 0,
+                    notBeforeMinutes: plan.notBeforeMinutes
                 )
             }
         )

@@ -788,6 +788,7 @@ struct PlanDetailTests {
         add("嵐山", day: 1, hasPlace: true, to: trip, in: context)
         middle.durationMinutes = 90
         middle.fixedStartMinutes = 13 * 60
+        middle.notBeforeMinutes = 15 * 60
         middle.doneAt = Date(timeIntervalSince1970: 1_000)
         middle.category = "市場"
         middle.area = "京都市中京区"
@@ -804,6 +805,7 @@ struct PlanDetailTests {
         #expect(restored.id == snapshot.id)
         #expect(restored.durationMinutes == 90)
         #expect(restored.fixedStartMinutes == 13 * 60)
+        #expect(restored.notBeforeMinutes == 15 * 60)
         #expect(restored.doneAt == Date(timeIntervalSince1970: 1_000))
         #expect(restored.category == "市場")
         #expect(restored.area == "京都市中京区")

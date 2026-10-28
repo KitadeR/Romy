@@ -105,10 +105,19 @@ struct ItineraryRow: View {
             if let slot {
                 timeColumn(slot)
             }
-            ItineraryCard(
-                item: item, number: number, color: color, isHighlighted: isHighlighted,
-                progress: progress, onToggleDone: onToggleDone
-            )
+            VStack(alignment: .leading, spacing: 4) {
+                ItineraryCard(
+                    item: item, number: number, color: color, isHighlighted: isHighlighted,
+                    progress: progress, onToggleDone: onToggleDone
+                )
+                // 「最終22:00を過ぎそう」 (Notion 02 §6-5 決定 2026-10-28 最終チェックイン).
+                if let slot, item.arrivesTooLate(at: slot.startMinutes), let last = item.lastCheckInMinutes {
+                    Text("最終\(DaySchedule.clock(last))を過ぎそう")
+                        .font(Theme.jp(12, .bold))
+                        .foregroundStyle(Theme.undo)
+                        .padding(.leading, 6)
+                }
+            }
         }
         .background { if let line, slot != nil { TimeLine(style: line) } }
     }

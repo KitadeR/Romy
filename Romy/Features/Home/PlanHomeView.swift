@@ -12,6 +12,10 @@ struct HomeActions {
     var search: () -> Void = {}
     var chooseDay: (WishPlace) -> Void = { _ in }
     var removeWish: (WishPlace) -> Void = { _ in }
+    /// Action Home: open a plan's detail in the itinerary, and 「いまどうする？」 for the plan that is 今
+    /// (nil where it is not offered).
+    var openPlan: (UUID) -> Void = { _ in }
+    var opportunity: (ItineraryItem) -> ActionOpportunity? = { _ in nil }
     /// True when the sheet is pulled to full height and the cover is hidden behind it.
     var isExpanded = false
 }
@@ -28,6 +32,7 @@ struct PlanHomeCover: View {
     private let text = DateText(calendar: .current, holidays: .bundled)
 
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var isEve: Bool { Preparation.phase(of: trip.dates, now: .now, calendar: text.calendar) == .eve }
     private var photo: UIImage? { trip.photo.flatMap(UIImage.init(data:)) }
     /// White text on a photo, ink text on the plain grey.
     private var onPhoto: Color { photo == nil ? Theme.ink : .white }
@@ -86,13 +91,23 @@ struct PlanHomeCover: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(countdown.caption).font(Theme.jp(14, .medium))
             PlanHomeTripName(name: trip.name, size: 18, action: actions.showTrips)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if !countdown.lead.isEmpty { Text(countdown.lead).font(Theme.jp(22, .bold)) }
-                Text(countdown.value)
-                    .font(countdown.value.allSatisfy(\.isNumber) ? Theme.latin(64, .bold) : Theme.jp(56, .bold))
-                if !countdown.trail.isEmpty { Text(countdown.trail).font(Theme.jp(22, .bold)) }
+            if isEve {
+                // 「明日 京都へ」 the day before (Figma 29-02).
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("明日").font(Theme.jp(22, .bold))
+                    Text("\(PlanHomeGlance.eve(of: trip).place)へ").font(Theme.jp(56, .bold)).lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                .padding(.top, 22)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if !countdown.lead.isEmpty { Text(countdown.lead).font(Theme.jp(22, .bold)) }
+                    Text(countdown.value)
+                        .font(countdown.value.allSatisfy(\.isNumber) ? Theme.latin(64, .bold) : Theme.jp(56, .bold))
+                    if !countdown.trail.isEmpty { Text(countdown.trail).font(Theme.jp(22, .bold)) }
+                }
+                .padding(.top, 22)
             }
-            .padding(.top, 22)
             HStack {
                 if countdown.offersDateDecision {
                     Button(action: actions.decideDates) {
@@ -144,13 +159,23 @@ struct PlanHomeSheet: View {
     let onAddPlans: () -> Void
     /// 「日に入れる」: opens the itinerary's 未定 tab.
     let onOpenUndecided: () -> Void
+    /// 「宿を予約する」: opens the plan's detail, where 「予約完了にする」 is.
+    var onOpenPlan: (UUID) -> Void = { _ in }
+    /// The summary of 準備 opens 準備; a day of the glance opens that day of the itinerary (Figma 29-01).
+    var onOpenPreparation: () -> Void = {}
+    var onOpenDay: (Int) -> Void = { _ in }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
+    private var preparation: Preparation { Preparation(trip: trip, calendar: text.calendar) }
 
-    /// Shinkansen moves are not built yet, so the choice is between 未定 plans and adding plans.
+    /// Shinkansen moves are not built yet, so the choice is a plan to book, 未定 plans or adding plans.
     private var nextAction: NextAction {
-        NextActionPicker.pick(dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count)
+        let booking = preparation.nextBooking(days: days)
+        return NextActionPicker.pick(
+            dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count, booking: booking
+        )
     }
 
     var body: some View {
@@ -164,12 +189,28 @@ struct PlanHomeSheet: View {
                 }
                 .padding(.top, 8)
             }
-            NextActionCard(action: nextAction) {
-                switch nextAction {
-                case .decideDates: actions.decideDates()
-                case .placeUndecided: onOpenUndecided()
-                case .addPlans, .trainStep: onAddPlans()
+            let preparation = preparation
+            if preparation.phase == .eve {
+                // The day before the trip: tomorrow and its preparation (Figma 29-02 / 29-03).
+                PlanHomeEve(
+                    eve: PlanHomeGlance.eve(of: trip), preparation: preparation,
+                    caption: days.caption(for: .day(1), hasDestination: true),
+                    onOpenPlan: onOpenPlan, onOpenDay: onOpenDay
+                )
+            } else {
+                NextActionCard(action: nextAction) {
+                    switch nextAction {
+                    case .decideDates: actions.decideDates()
+                    case .placeUndecided: onOpenUndecided()
+                    case .book(let booking): onOpenPlan(booking.id)
+                    case .addPlans, .trainStep: onAddPlans()
+                    }
                 }
+                if let summary = PlanHomeGlance.summary(preparation) {
+                    PlanHomeSummaryRow(text: summary, onTap: onOpenPreparation)
+                }
+                let counts = PlanHomeGlance.dayCounts(of: trip, days: days)
+                if !counts.isEmpty { PlanHomeDayGlance(counts: counts, onOpenDay: onOpenDay) }
             }
         }
         .padding(.horizontal, 20)
@@ -205,18 +246,9 @@ private struct TripPhotoPicker: ViewModifier {
 
     private func save(_ item: PhotosPickerItem?) async {
         guard let item, let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else { return }
-        trip.photo = Self.downscaled(image).jpegData(compressionQuality: 0.8)
+              let jpeg = PhotoData.jpeg(from: data, longestSide: PhotoData.coverSide) else { return }
+        trip.photo = jpeg
         try? modelContext.save()
-    }
-
-    /// Keeps the stored cover small: the longer side at most 1600 px.
-    private static func downscaled(_ image: UIImage) -> UIImage {
-        let longest = max(image.size.width, image.size.height)
-        guard longest > 1600 else { return image }
-        let scale = 1600 / longest
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        return UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
     }
 }
 
@@ -229,6 +261,7 @@ struct NextActionCard: View {
         switch action {
         case .trainStep(let step), .decideDates(let step):
             step.day.map { "\($0)日目 \(step.route)" } ?? "未定 \(step.route)"
+        case .book(let booking): booking.context
         case .placeUndecided(let count): "未定の予定 \(count)件"
         case .addPlans: "旅程"
         }
@@ -238,6 +271,7 @@ struct NextActionCard: View {
         switch action {
         case .trainStep(let step): step.title
         case .decideDates: "日付を決める"
+        case .book(let booking): booking.title
         case .placeUndecided: "日に入れる"
         case .addPlans: "予定を追加"
         }
