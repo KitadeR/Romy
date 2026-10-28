@@ -1,0 +1,2 @@
+# Copy to .dev.vars (ignored by Git) and put the Perplexity API key there yourself.
+PERPLEXITY_API_KEY=
