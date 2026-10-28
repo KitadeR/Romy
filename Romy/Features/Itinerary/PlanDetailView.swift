@@ -289,7 +289,17 @@ struct PlanDetailView: View {
 
 extension PlanDetailView {
     /// 予約: 「予約：まだ／済み」 (tap 済み to go back to まだ), and for a plan that is not a stay the 「予約が要る」 switch.
+    /// A friend's house has no booking; a stay decided later says it is not decided yet (Notion 02 §6-5 2026-10-28).
+    @ViewBuilder
     private var bookingCard: some View {
+        if item.kind == .stay, item.stayKind == .friend {
+            EmptyView()
+        } else {
+            bookingContent
+        }
+    }
+
+    private var bookingContent: some View {
         card {
             VStack(alignment: .leading, spacing: 0) {
                 caption("予約")
@@ -304,7 +314,8 @@ extension PlanDetailView {
                 if item.needsBooking {
                     if item.kind != .stay { Divider() }
                     if item.bookedAt == nil {
-                        Text("予約：まだ").font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink).padding(.vertical, 13)
+                        Text(item.kind == .stay && item.stayKind == .later ? "宿：まだ決めていない" : "予約：まだ")
+                            .font(Theme.jp(15, .bold)).foregroundStyle(Theme.ink).padding(.vertical, 13)
                     } else {
                         row("予約：済み（押すとまだに戻す）", symbol: "checkmark.circle.fill", action: onToggleBooked)
                     }

@@ -145,7 +145,9 @@ struct AppShell: View {
                     itineraryTab = .undecided
                     tab = .itinerary
                 },
-                onOpenPlan: { openPlan($0, actions) }
+                onOpenPlan: { openPlan($0, actions) },
+                onOpenPreparation: { tab = .preparation },
+                onOpenDay: openDay
             )
         case .wishlist:
             wishlist(actions)
@@ -310,6 +312,12 @@ extension AppShell {
         wishActions.removeWish = removeWish
         let isAction = TripPhase(dates: trip.dates, today: .now) == .action
         return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
+    }
+
+    /// Opens one day of the itinerary (a day of the Plan Home's glance, Figma 29-01).
+    fileprivate func openDay(_ day: Int) {
+        itineraryTab = .day(day)
+        tab = .itinerary
     }
 
     /// Opens a plan's detail on the itinerary, on the plan's own day (or 未定).

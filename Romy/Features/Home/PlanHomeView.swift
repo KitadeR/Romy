@@ -32,6 +32,7 @@ struct PlanHomeCover: View {
     private let text = DateText(calendar: .current, holidays: .bundled)
 
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var isEve: Bool { Preparation.phase(of: trip.dates, now: .now, calendar: text.calendar) == .eve }
     private var photo: UIImage? { trip.photo.flatMap(UIImage.init(data:)) }
     /// White text on a photo, ink text on the plain grey.
     private var onPhoto: Color { photo == nil ? Theme.ink : .white }
@@ -90,13 +91,23 @@ struct PlanHomeCover: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(countdown.caption).font(Theme.jp(14, .medium))
             PlanHomeTripName(name: trip.name, size: 18, action: actions.showTrips)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if !countdown.lead.isEmpty { Text(countdown.lead).font(Theme.jp(22, .bold)) }
-                Text(countdown.value)
-                    .font(countdown.value.allSatisfy(\.isNumber) ? Theme.latin(64, .bold) : Theme.jp(56, .bold))
-                if !countdown.trail.isEmpty { Text(countdown.trail).font(Theme.jp(22, .bold)) }
+            if isEve {
+                // 「明日 京都へ」 the day before (Figma 29-02).
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("明日").font(Theme.jp(22, .bold))
+                    Text("\(PlanHomeGlance.eve(of: trip).place)へ").font(Theme.jp(56, .bold)).lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                .padding(.top, 22)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if !countdown.lead.isEmpty { Text(countdown.lead).font(Theme.jp(22, .bold)) }
+                    Text(countdown.value)
+                        .font(countdown.value.allSatisfy(\.isNumber) ? Theme.latin(64, .bold) : Theme.jp(56, .bold))
+                    if !countdown.trail.isEmpty { Text(countdown.trail).font(Theme.jp(22, .bold)) }
+                }
+                .padding(.top, 22)
             }
-            .padding(.top, 22)
             HStack {
                 if countdown.offersDateDecision {
                     Button(action: actions.decideDates) {
@@ -150,14 +161,18 @@ struct PlanHomeSheet: View {
     let onOpenUndecided: () -> Void
     /// 「宿を予約する」: opens the plan's detail, where 「予約完了にする」 is.
     var onOpenPlan: (UUID) -> Void = { _ in }
+    /// The summary of 準備 opens 準備; a day of the glance opens that day of the itinerary (Figma 29-01).
+    var onOpenPreparation: () -> Void = {}
+    var onOpenDay: (Int) -> Void = { _ in }
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private var countdown: TripCountdown { TripCountdown(dates: trip.dates, today: .now, text: text) }
+    private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
+    private var preparation: Preparation { Preparation(trip: trip, calendar: text.calendar) }
 
     /// Shinkansen moves are not built yet, so the choice is a plan to book, 未定 plans or adding plans.
     private var nextAction: NextAction {
-        let booking = Preparation(trip: trip, calendar: text.calendar)
-            .nextBooking(days: ItineraryDays(dates: trip.dates, text: text))
+        let booking = preparation.nextBooking(days: days)
         return NextActionPicker.pick(
             dates: trip.dates, trainSteps: [], undecidedPlanCount: trip.items(on: nil).count, booking: booking
         )
@@ -174,13 +189,28 @@ struct PlanHomeSheet: View {
                 }
                 .padding(.top, 8)
             }
-            NextActionCard(action: nextAction) {
-                switch nextAction {
-                case .decideDates: actions.decideDates()
-                case .placeUndecided: onOpenUndecided()
-                case .book(let booking): onOpenPlan(booking.id)
-                case .addPlans, .trainStep: onAddPlans()
+            let preparation = preparation
+            if preparation.phase == .eve {
+                // The day before the trip: tomorrow and its preparation (Figma 29-02 / 29-03).
+                PlanHomeEve(
+                    eve: PlanHomeGlance.eve(of: trip), preparation: preparation,
+                    caption: days.caption(for: .day(1), hasDestination: true),
+                    onOpenPlan: onOpenPlan, onOpenDay: onOpenDay
+                )
+            } else {
+                NextActionCard(action: nextAction) {
+                    switch nextAction {
+                    case .decideDates: actions.decideDates()
+                    case .placeUndecided: onOpenUndecided()
+                    case .book(let booking): onOpenPlan(booking.id)
+                    case .addPlans, .trainStep: onAddPlans()
+                    }
                 }
+                if let summary = PlanHomeGlance.summary(preparation) {
+                    PlanHomeSummaryRow(text: summary, onTap: onOpenPreparation)
+                }
+                let counts = PlanHomeGlance.dayCounts(of: trip, days: days)
+                if !counts.isEmpty { PlanHomeDayGlance(counts: counts, onOpenDay: onOpenDay) }
             }
         }
         .padding(.horizontal, 20)
