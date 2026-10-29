@@ -50,6 +50,9 @@ struct ActionSceneSheet: View {
                         header
                         if let input = model.input {
                             Text(caption(input)).font(Theme.jp(13, .medium)).foregroundStyle(Theme.actionSecondary)
+                            if input.end == .chosen, model.selected == nil {
+                                ChosenLengthSlider(minutes: $model.chosenMinutes) { revision += 1 }
+                            }
                             if model.usesPlanPlace {
                                 Text("今の予定の場所から計算しています")
                                     .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
@@ -198,12 +201,20 @@ struct ActionSceneSheet: View {
         }
     }
 
+    /// What ends the time: the fixed plan (with the stay before it), the stay's check-in, or the chosen length.
     private func caption(_ input: SceneInput) -> String {
-        let next = "\(DaySchedule.clock(input.nextStartMinutes)) \(input.nextTitle)（固定）"
-        if let stay = input.stay, let opens = stay.checkInMinutes {
-            return "次は \(DaySchedule.clock(opens))から \(stay.title) ・ \(next)"
+        let stay = input.stay.flatMap { stay in
+            stay.checkInMinutes.map { "\(DaySchedule.clock($0))から \(stay.title)" }
         }
-        return "次は \(next)"
+        switch input.end {
+        case let .plan(title, _):
+            let next = "\(DaySchedule.clock(input.endMinutes)) \(title)（固定）"
+            return stay.map { "次は \($0) ・ \(next)" } ?? "次は \(next)"
+        case .checkIn:
+            return "次は \(stay ?? "宿")（このあと時刻の決まった予定はありません）"
+        case .chosen:
+            return "このあと時刻の決まった予定はありません。すごす時間を選んでください"
+        }
     }
 
     private func refresh() async {
@@ -236,5 +247,39 @@ struct ActionSceneSheet: View {
         }
         .foregroundStyle(Theme.ink).padding(16).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.base, in: .rect(cornerRadius: 18))
+    }
+}
+
+/// 「あと何時間すごす？」: when nothing in the itinerary ends the time, the person chooses how long
+/// (2026-10-29, るわさん「わからないならスライドバーで時間を決めれるようにして」). 30 minutes to 5 hours; the ways are
+/// made again when the finger lets go.
+private struct ChosenLengthSlider: View {
+    @Binding var minutes: Int
+    let onChosen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("あと").font(Theme.jp(13, .medium))
+                Text(DurationText.text(minutes: minutes)).font(Theme.jp(20, .bold))
+                Text("すごす").font(Theme.jp(13, .medium))
+            }
+            Slider(
+                value: Binding(get: { Double(minutes) }, set: { minutes = Int($0) }),
+                in: Double(ActionSceneModel.chosenRange.lowerBound)...Double(ActionSceneModel.chosenRange.upperBound),
+                step: 30
+            ) { Text("すごす時間") } minimumValueLabel: {
+                Text("30分").font(Theme.jp(11)).foregroundStyle(Theme.actionSecondary)
+            } maximumValueLabel: {
+                Text("5時間").font(Theme.jp(11)).foregroundStyle(Theme.actionSecondary)
+            } onEditingChanged: { editing in
+                if !editing { onChosen() }
+            }
+            .tint(Theme.ink)
+            .accessibilityValue(DurationText.text(minutes: minutes))
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(14)
+        .background(Theme.base, in: .rect(cornerRadius: 16))
     }
 }

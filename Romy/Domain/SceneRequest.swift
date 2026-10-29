@@ -9,24 +9,22 @@ struct SceneRequest: Identifiable {
     /// When 今 started on the day's schedule; 「この内容で旅程に入れる」 ends it at the time of the search.
     var currentStartMinutes: Int?
 
-    /// The plans between 今 and the first fixed plan ahead (not 済み), the stay among them, and that fixed plan.
+    /// The plans 今 may leave out, the stay among the plans ahead, and the fixed plan that ends the time.
     struct Ahead {
+        /// Plans before the end that a way leaves out (they go to 未定); none when a chosen length ends the time.
         let between: [ItineraryItemSnapshot]
         let stay: ItineraryItemSnapshot?
-        let next: ItineraryItemSnapshot
+        /// The first fixed plan ahead; nil when there is none and the stay's check-in or a chosen length ends it.
+        let next: ItineraryItemSnapshot?
     }
 
     enum Issue: Error, Equatable {
-        case missingCurrent, needsLocation, needsFixedPlan, needsNextPlace, needsStayPlace, needsCheckIn
+        case missingCurrent, needsLocation
 
         var message: String {
             switch self {
             case .missingCurrent: "今の予定が変わりました。Homeから開き直してください。"
             case .needsLocation: "今いる場所が分かりません"
-            case .needsFixedPlan: "この後の予定の時刻を決めてください"
-            case .needsNextPlace: "次の固定の予定に場所を入れてください"
-            case .needsStayPlace: "宿の予定に場所を入れてください"
-            case .needsCheckIn: "宿のチェックインできる時刻を入れてください"
             }
         }
     }
@@ -39,36 +37,55 @@ struct SceneRequest: Identifiable {
         current.flatMap { Self.place($0) }
     }
 
-    /// The first fixed plan ahead is the boundary, even when it has no location. Never skip it to fit a later one.
-    func input(origin: ProposalPlace?, nowMinutes: Int) -> Result<SceneInput, Issue> {
-        guard plans.contains(where: { $0.id == id }) else { return .failure(.missingCurrent) }
-        guard let origin else { return .failure(.needsLocation) }
-        guard let ahead = ahead(), let nextStart = ahead.next.fixedStartMinutes else {
-            return .failure(.needsFixedPlan)
+    /// What ends the time (2026-10-29, るわさん「どんな状態でも案がみれるようにする」): the first fixed plan ahead,
+    /// even without a place (never skipped to fit a later one); otherwise the stay's check-in when it is known and
+    /// still ahead; otherwise the length the person chose. A time is never guessed.
+    func input(origin: ProposalPlace?, nowMinutes: Int, chosenMinutes: Int) -> Result<SceneInput, Issue> {
+        guard plans.contains(where: { $0.id == id }), let ahead = ahead(nowMinutes: nowMinutes) else {
+            return .failure(.missingCurrent)
         }
-        let next = ahead.next
-        guard let nextPlace = Self.place(next) else { return .failure(.needsNextPlace) }
-        var stay: SceneInput.Stay?
-        if let hotel = ahead.stay {
-            guard let place = Self.place(hotel) else { return .failure(.needsStayPlace) }
-            guard let opens = hotel.notBeforeMinutes else { return .failure(.needsCheckIn) }
-            stay = SceneInput.Stay(title: hotel.title, place: place, checkInMinutes: opens)
+        guard let origin else { return .failure(.needsLocation) }
+        // A stay without a place or a check-in time cannot be planned around, so it is left as it is.
+        let stay = ahead.stay.flatMap { hotel -> SceneInput.Stay? in
+            guard let place = Self.place(hotel), let opens = hotel.notBeforeMinutes else { return nil }
+            return SceneInput.Stay(title: hotel.title, place: place, checkInMinutes: opens)
+        }
+        let end: SceneInput.End
+        let endMinutes: Int
+        if let next = ahead.next, let start = next.fixedStartMinutes {
+            end = .plan(title: next.title, place: Self.place(next))
+            endMinutes = start
+        } else if let opens = stay?.checkInMinutes, opens > nowMinutes {
+            end = .checkIn
+            endMinutes = opens
+        } else {
+            end = .chosen
+            endMinutes = nowMinutes + chosenMinutes
         }
         return .success(SceneInput(
-            nowMinutes: nowMinutes, origin: origin, stay: stay, nextTitle: next.title, next: nextPlace,
-            nextStartMinutes: nextStart, states: states,
+            nowMinutes: nowMinutes, origin: origin, stay: stay, end: end, endMinutes: endMinutes, states: states,
             strength: states.contains(.tired) ? strength : nil
         ))
     }
 
-    func ahead() -> Ahead? {
+    func ahead(nowMinutes: Int) -> Ahead? {
         guard let index = plans.firstIndex(where: { $0.id == id }) else { return nil }
         let remaining = Array(plans.dropFirst(index + 1).filter { $0.doneAt == nil })
-        guard let nextIndex = remaining.firstIndex(where: { $0.fixedStartMinutes != nil }) else { return nil }
-        let between = Array(remaining.prefix(nextIndex))
-        return Ahead(
-            between: between, stay: between.first { $0.kindRaw == PlanKind.stay.rawValue }, next: remaining[nextIndex]
-        )
+        let isStay: (ItineraryItemSnapshot) -> Bool = { $0.kindRaw == PlanKind.stay.rawValue }
+        if let nextIndex = remaining.firstIndex(where: { $0.fixedStartMinutes != nil }) {
+            let between = Array(remaining.prefix(nextIndex))
+            return Ahead(between: between, stay: between.first(where: isStay), next: remaining[nextIndex])
+        }
+        if let stayIndex = remaining.firstIndex(where: { plan in
+            isStay(plan) && Self.place(plan) != nil && (plan.notBeforeMinutes ?? .min) > nowMinutes
+        }) {
+            return Ahead(between: Array(remaining.prefix(stayIndex)), stay: remaining[stayIndex], next: nil)
+        }
+        // A chosen length: nothing is left out, and a stay already open can still be entered.
+        let open = remaining.first { plan in
+            isStay(plan) && Self.place(plan) != nil && plan.notBeforeMinutes.map { $0 <= nowMinutes } == true
+        }
+        return Ahead(between: [], stay: open, next: nil)
     }
 
     private static func place(_ item: ItineraryItemSnapshot) -> ProposalPlace? {

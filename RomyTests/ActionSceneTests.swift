@@ -64,8 +64,41 @@ struct ActionSceneTests {
         SceneInput(
             nowMinutes: now, origin: origin,
             stay: SceneInput.Stay(title: "ホテル", place: hotel, checkInMinutes: checkIn),
-            nextTitle: "お店", next: dinner, nextStartMinutes: 17 * 60, states: states, strength: strength
+            end: .plan(title: "お店", place: dinner), endMinutes: 17 * 60, states: states, strength: strength
         )
+    }
+
+    /// No fixed plan after the stay: its check-in ends the time (2026-10-29).
+    private func untilCheckIn(_ states: Set<ActionState>, now: Int = 14 * 60) -> SceneInput {
+        SceneInput(
+            nowMinutes: now, origin: origin,
+            stay: SceneInput.Stay(title: "ホテル", place: hotel, checkInMinutes: 15 * 60),
+            end: .checkIn, endMinutes: 15 * 60, states: states, strength: .quite
+        )
+    }
+
+    @Test func withoutAFixedPlanTheWaysEndAtTheStayAndTheDropIsStillOffered() async throws {
+        let ways = await ActionScene.build(
+            untilCheckIn([.tired, .heavyLuggage]), search: search, walking: walking, luggageCheck: { _ in .official }
+        )
+        let drop = try #require(ways.first { $0.leavesLuggageAtStay })
+        #expect(drop.steps.map(\.kind) == [.dropLuggage, .rest, .checkIn])
+        #expect(drop.steps.last?.startMinutes == 15 * 60)
+        #expect(drop.fits)
+        #expect(!drop.endsAtPlan)
+    }
+
+    @Test func aChosenLengthIsFilledByTheLastSeatWithNothingToWalkTo() async throws {
+        let chosen = SceneInput(
+            nowMinutes: 14 * 60, origin: origin, stay: nil, end: .chosen, endMinutes: 14 * 60 + 90,
+            states: [.tired], strength: .quite
+        )
+        let ways = await ActionScene.build(chosen, search: search, walking: walking)
+        let first = try #require(ways.first)
+        #expect(first.steps.map(\.kind) == [.rest])
+        #expect(first.steps.last?.leaveMinutes == 14 * 60 + 90)
+        #expect(first.fits)
+        #expect(!first.endsAtPlan)
     }
 
     @Test func withAnUnknownDropTheWayThatDoesNotNeedItComesFirst() async {

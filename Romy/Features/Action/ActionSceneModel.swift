@@ -16,6 +16,10 @@ final class ActionSceneModel {
     private(set) var routeFailed = false
     private(set) var usesPlanPlace = false
     var selectedID: String?
+    /// How long the person means to spend, when nothing in the itinerary ends the time (「あと何時間すごす？」).
+    var chosenMinutes = ActionSceneModel.defaultChosenMinutes
+    static let defaultChosenMinutes = 90
+    static let chosenRange = 30...300
     @ObservationIgnored private let search: CandidateSearch
     @ObservationIgnored private let facts: LuggageFacts
     @ObservationIgnored private let now: () -> Date
@@ -71,7 +75,7 @@ final class ActionSceneModel {
             id: request.id, plans: request.plans, states: states, strength: strength,
             currentStartMinutes: request.currentStartMinutes
         )
-        switch updated.input(origin: origin, nowMinutes: nowMinutes) {
+        switch updated.input(origin: origin, nowMinutes: nowMinutes, chosenMinutes: chosenMinutes) {
         case let .failure(issue): phase = .needsInput(issue)
         case let .success(scene):
             input = scene
@@ -98,7 +102,8 @@ final class ActionSceneModel {
     /// The stay's check when it is kept and fresh; otherwise the stay to ask about now, when the person allowed it
     /// (Notion 02 §6-4「決定（2026-10-29）｜事実の確認⑤」).
     private func luggage(for scene: SceneInput) -> (known: LuggageFact?, asking: ItineraryItemSnapshot?) {
-        guard scene.hasHeavyLuggage, scene.stay != nil, let stay = request.ahead()?.stay else { return (nil, nil) }
+        guard scene.hasHeavyLuggage, scene.stay != nil,
+              let stay = request.ahead(nowMinutes: scene.nowMinutes)?.stay else { return (nil, nil) }
         let key = LuggageFact.placeKey(title: stay.title, placeID: stay.placeID, area: stay.area)
         if let fact = facts.stored(stay.id), fact.placeKey == key, fact.isFresh(at: now()) { return (fact, nil) }
         return (nil, facts.allowed() ? stay : nil)

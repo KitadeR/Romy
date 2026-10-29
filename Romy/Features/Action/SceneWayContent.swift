@@ -59,7 +59,8 @@ struct SceneWayRow: View {
                 Text(option.way.stepsCaption).font(Theme.jp(12, .medium))
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(option.isUnavailable ? 0.4 : 1)
-                Text("徒歩\(option.way.walkMinutes)分 ・ \(slack)")
+                Text(option.way.endsAtPlan || !option.way.fits ? "徒歩\(option.way.walkMinutes)分 ・ \(slack)"
+                     : "徒歩\(option.way.walkMinutes)分")
                     .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(option.isUnavailable ? 0.4 : 1)
@@ -136,7 +137,7 @@ struct SceneWaySummary: View {
                         Text("徒歩 \(step.walkBeforeMinutes)分").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                     }
                     HStack(alignment: .top, spacing: 12) {
-                        Text(DaySchedule.clock(step.kind == .next ? input.nextStartMinutes : step.startMinutes))
+                        Text(DaySchedule.clock(step.kind == .next ? input.endMinutes : step.startMinutes))
                             .font(Theme.latin(13, .bold)).frame(minWidth: 48, alignment: .leading)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(step.kind.emoji) \(step.title)\(step.isUnknown ? " ？" : "")")
@@ -163,7 +164,10 @@ struct SceneWaySummary: View {
     @ViewBuilder private var metrics: some View {
         metric("徒歩", "\(option.way.walkMinutes)分")
         metric("座って休める", "約\(DurationText.text(minutes: option.way.sitMinutes))")
-        metric("余裕", option.way.fits ? "\(option.way.slackMinutes)分" : "\(option.way.shortfallMinutes)分足りない")
+        // Spare minutes only mean something when the way walks to a fixed plan at the end.
+        if option.way.endsAtPlan || !option.way.fits {
+            metric("余裕", option.way.fits ? "\(option.way.slackMinutes)分" : "\(option.way.shortfallMinutes)分足りない")
+        }
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
