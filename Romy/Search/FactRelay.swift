@@ -6,16 +6,23 @@ import SwiftData
 /// Only the stay's name and address go out, never where the person is or the itinerary (Notion 04
 /// 「2026-10-29｜各社のデータの扱い」①). Nil when nothing came back: offline, the caps, or no relay in this build.
 nonisolated struct FactRelay {
-    /// The relay on this Mac while it is built (`wrangler dev`); stage 3 puts the deployed one here.
-    static let shared = FactRelay(baseURL: {
-        #if DEBUG
-        URL(string: "http://localhost:8787")
+    /// The Simulator asks the relay on this Mac (`wrangler dev`, no passphrase); an iPhone asks the published one
+    /// written in `Romy/Config/Relay.plist`, which is kept out of Git (Notion 04「2026-10-29｜段階3 公開」).
+    /// Without that file the iPhone does not check, as before.
+    static let shared: FactRelay = {
+        #if targetEnvironment(simulator)
+        FactRelay(baseURL: URL(string: "http://localhost:8787"))
         #else
-        nil
+        let config = Bundle.main.url(forResource: "Relay", withExtension: "plist")
+            .flatMap { try? Data(contentsOf: $0) }
+            .flatMap(RelayConfig.decode)
+        return FactRelay(baseURL: config?.url, token: config?.token)
         #endif
-    }())
+    }()
 
     let baseURL: URL?
+    /// The app's passphrase for the published relay; it only keeps casual callers out.
+    var token: String?
     var session: URLSession = .shared
 
     func luggage(title: String, placeID: String?, area: String?) async -> LuggageFact? {
@@ -29,6 +36,7 @@ nonisolated struct FactRelay {
         request.timeoutInterval = 70
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.deviceID, forHTTPHeaderField: "X-Romy-Device")
+        if let token { request.setValue(token, forHTTPHeaderField: "X-Romy-Token") }
         let body: [String: Any] = ["kind": "luggage_before_checkin", "place": place]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await session.data(for: request),
@@ -69,6 +77,21 @@ nonisolated struct FactRelay {
         let id = UUID().uuidString
         UserDefaults.standard.set(id, forKey: key)
         return id
+    }
+}
+
+/// Where the published relay is and the app's passphrase, from `Romy/Config/Relay.plist` (not in Git;
+/// `server/relay/Relay.plist.example` shows its shape).
+nonisolated struct RelayConfig: Equatable {
+    let url: URL
+    let token: String
+
+    /// Nil when the file is not filled in, so a half-written file never sends to a wrong place.
+    static func decode(_ data: Data) -> RelayConfig? {
+        guard let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let address = values["URL"] as? String, let url = URL(string: address), url.scheme == "https",
+              let token = values["Token"] as? String, !token.isEmpty else { return nil }
+        return RelayConfig(url: url, token: token)
     }
 }
 

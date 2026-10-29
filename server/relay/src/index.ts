@@ -2,23 +2,30 @@ import { runCheck } from "./check";
 import { isKind } from "./kinds";
 import { perplexity } from "./perplexity";
 import { D1Store } from "./store";
+import { tokenAllows } from "./token";
 import type { CheckRequest, CheckResponse } from "./types";
 
 export interface Env {
   DB: D1Database;
   PERPLEXITY_API_KEY?: string;
+  /// The app's passphrase on the published relay (a secret); unset on the Mac.
+  APP_TOKEN?: string;
   DEVICE_DAILY_SEARCHES: string;
   GLOBAL_DAILY_USD: string;
   RESERVE_USD: string;
 }
 
-/// POST /v1/check with {kind, place:{id?, name, address?}} and the device in `X-Romy-Device`.
-/// The device is an opaque ID for the daily cap; from stage 3 it is the App Attest key ID (Notion 04).
+/// POST /v1/check with {kind, place:{id?, name, address?}}, the device in `X-Romy-Device` and, on the published
+/// relay, the app's passphrase in `X-Romy-Token`. The device is an opaque ID for the daily cap; it becomes the
+/// App Attest key ID once the paid Apple Developer Program is there (Notion 04「2026-10-29｜段階3 公開」).
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname !== "/v1/check") return new Response("Not found", { status: 404 });
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+    if (!tokenAllows(env.APP_TOKEN, request.headers.get("X-Romy-Token"))) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const device = request.headers.get("X-Romy-Device") ?? "";
     if (!/^[A-Za-z0-9_\-=+/]{8,128}$/.test(device)) return new Response("Bad device", { status: 400 });

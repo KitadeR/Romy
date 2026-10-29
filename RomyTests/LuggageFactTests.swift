@@ -33,6 +33,18 @@ struct LuggageFactTests {
         #expect(fact.checkedDateText(calendar: calendar) == "10/29 確認")
     }
 
+    @Test func thePublishedRelayIsReadFromItsFileAndAHalfWrittenOneIsIgnored() throws {
+        func plist(_ url: String, _ token: String) throws -> Data {
+            try PropertyListSerialization.data(fromPropertyList: ["URL": url, "Token": token], format: .xml, options: 0)
+        }
+        let config = RelayConfig.decode(try plist("https://romy-relay.example.workers.dev", "secret"))
+        #expect(config?.url.host() == "romy-relay.example.workers.dev")
+        #expect(config?.token == "secret")
+        #expect(RelayConfig.decode(try plist("https://romy-relay.example.workers.dev", "")) == nil)
+        #expect(RelayConfig.decode(try plist("http://romy-relay.example.workers.dev", "secret")) == nil)
+        #expect(RelayConfig.decode(Data("not a plist".utf8)) == nil)
+    }
+
     @Test func anAnswerWithAReasonIsNotKept() {
         let json = """
         {"status":"unknown","conditions":[],"sources":[],"locker":"unknown","checkedAt":"2026-10-28T16:10:00.651Z",

@@ -13,8 +13,8 @@ invocation_logs = false
 [[d1_databases]]
 binding = "DB"
 database_name = "romy-relay"
-# Filled in after `wrangler d1 create romy-relay` (stage 3). Local runs do not need it.
-database_id = "00000000-0000-0000-0000-000000000000"
+# Created 2026-10-29 (stage 3, region APAC). Local runs use their own copy.
+database_id = "4c96f72e-8c3e-4bf8-b0d4-4c847c1f3584"
 migrations_dir = "migrations"
 
 [vars]

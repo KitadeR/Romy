@@ -49,12 +49,17 @@ export async function runCheck(request: CheckRequest, device: string, deps: Deps
     const answer = await deps.search(spec.instructions, spec.input(request.place), spec.schema);
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
-    if (!json) return nothing("error");
+    if (!json) {
+      console.log(JSON.stringify({ event: "check_failed", error: "no json in the answer" }));
+      return nothing("error");
+    }
     const decided = decideLuggage(request.place, json as LuggageAnswer, answer.urls);
     const result: CheckResult = { ...decided, checkedAt: now.toISOString() };
     await deps.store.putCheck(key, request.kind, result, nowMs + spec.ttlMs[result.status]);
     return { ...result, cached: false };
-  } catch {
+  } catch (error) {
+    // The kind of failure only (an HTTP status, a D1 message), never the place (Notion 04「各社のデータの扱い」④).
+    console.log(JSON.stringify({ event: "check_failed", error: String(error).slice(0, 120) }));
     return nothing("error");
   } finally {
     await deps.store.settle(day, deps.limits.reserveUSD, spent);
