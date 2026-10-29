@@ -12,13 +12,19 @@ struct ProposalPlace: Equatable {
     let category: String
     let latitude: Double
     let longitude: Double
+    /// Apple's place ID, when the place came from Apple's search; it opens Apple's place card (photos, hours).
+    let placeID: String?
 
-    init(name: String, address: String? = nil, category: String = "none", latitude: Double, longitude: Double) {
+    init(
+        name: String, address: String? = nil, category: String = "none", latitude: Double, longitude: Double,
+        placeID: String? = nil
+    ) {
         self.name = name
         self.address = address
         self.category = category
         self.latitude = latitude
         self.longitude = longitude
+        self.placeID = placeID
     }
 
     var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }

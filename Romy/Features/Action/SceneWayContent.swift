@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 extension SceneStep.Kind {
@@ -28,6 +29,11 @@ extension SceneWay {
         }.joined(separator: " › ")
     }
 
+    /// The place the way adds to sit in (a rest or a meal), whose picture leads the card.
+    var seatPlace: ProposalPlace? {
+        steps.first { $0.kind == .rest || $0.kind == .eat }?.place
+    }
+
     var verificationCaption: String {
         if steps.contains(where: { $0.kind == .dropLuggage && $0.isUnknown }) {
             return "？ 宿で預けられるかは未確認です"
@@ -55,6 +61,10 @@ struct SceneWayRow: View {
                         HStack(alignment: .top, spacing: 8) { title; sit }
                         VStack(alignment: .leading, spacing: 8) { title; sit }
                     }
+                }
+                if let seat = option.way.seatPlace {
+                    LookAroundPicture(place: seat)
+                        .opacity(option.isUnavailable ? 0.4 : 1)
                 }
                 Text(option.way.stepsCaption).font(Theme.jp(12, .medium))
                     .fixedSize(horizontal: false, vertical: true)
@@ -112,10 +122,23 @@ struct SceneWaySummary: View {
     let option: SceneOption
     let input: SceneInput
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// Apple's place card open for a place of the way.
+    @State private var appleCard: AppleCardItem?
+
+    struct AppleCardItem: Identifiable {
+        let item: MKMapItem
+        var id: ObjectIdentifier { ObjectIdentifier(item) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("\(option.id)  \(option.way.reason.headline)").font(Theme.jp(17, .bold))
+            if let seat = option.way.seatPlace {
+                VStack(alignment: .leading, spacing: 8) {
+                    LookAroundPicture(place: seat, height: 160)
+                    if seat.placeID != nil { appleCardButton(seat) }
+                }
+            }
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) { metrics }
             } else {
@@ -159,6 +182,26 @@ struct SceneWaySummary: View {
             }
         }
         .foregroundStyle(Theme.ink)
+        .sheet(item: $appleCard) { card in
+            AppleMapItemDetail(item: card.item) { appleCard = nil }
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// 「写真・営業時間を見る」: Apple's own place card, where the place's photos and hours are.
+    private func appleCardButton(_ place: ProposalPlace) -> some View {
+        Button {
+            Task {
+                if let item = await PlacePhotos.mapItem(of: place) { appleCard = AppleCardItem(item: item) }
+            }
+        } label: {
+            Label("\(place.name)の写真・営業時間（Appleマップ）", systemImage: "photo.on.rectangle")
+                .font(Theme.jp(12, .medium))
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 44)
+                .background(Theme.base, in: .capsule)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder private var metrics: some View {
