@@ -53,3 +53,11 @@ Wikipediaの読みの個別の権利範囲・追加条件と、加工データ�
 ## この表示の範囲
 
 取得元ごとの条件を区別して記載しています。この文書でRomyのソースコード全体のライセンスを新たに指定したものではありません。アプリ内の出典閲覧導線と、提出版へのこれらの表示の同梱は、最終版で確認します。
+
+## アプリへの組み込み用ファイル（統合前）
+
+- [出典表示・フォントの著作権表示・OFL原文全文](Romy/Resources/Acknowledgements/RomyAttributions.txt)
+- [元記事とWikidataへの直接URL付き索引](Romy/Resources/Acknowledgements/RomySourceArticles.csv)
+- [組み込み・同梱・画面表示の確認手順](docs/attribution-integration.md)
+
+これらは文書ブランチ上に準備したファイルです。提出するアプリへ統合し、閲覧できる状態にする作業と最終確認はこれからです。
