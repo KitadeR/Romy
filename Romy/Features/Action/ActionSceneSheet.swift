@@ -193,7 +193,7 @@ struct ActionSceneSheet: View {
             Divider()
         }
         if !model.ways.isEmpty {
-            Text("地図は徒歩経路。時間は目安です。荷物預かり・ロッカーや席の空き・営業時間は確認していません。")
+            Text(model.footnote)
                 .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
         }
     }

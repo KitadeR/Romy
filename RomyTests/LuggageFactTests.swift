@@ -152,6 +152,7 @@ struct LuggageFactTests {
         #expect(drop.luggage == .checked(answer))
         #expect(drop.way.reason == .dropFirst)
         #expect(saved[hotel.id] == answer)
+        #expect(model.footnote.contains("宿の荷物預かりはAIが調べた公開情報です"))
     }
 
     @Test func romyNowUsesAKeptCheckWithoutAsking() async throws {
@@ -179,5 +180,6 @@ struct LuggageFactTests {
         await model.refresh(origin: here, nowMinutes: 14 * 60, usesPlanPlace: false)
         #expect(asked == 0)
         #expect(model.ways.allSatisfy { $0.luggage == .none })
+        #expect(model.footnote.contains("荷物預かり・ロッカーや席の空き・営業時間は確認していません"))
     }
 }

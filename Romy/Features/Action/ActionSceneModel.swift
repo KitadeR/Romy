@@ -41,6 +41,17 @@ final class ActionSceneModel {
         ways.first { $0.id == selectedID }
     }
 
+    /// The note under the ways. Once the stay's answer is in, its luggage line is no longer 「確認していません」.
+    var footnote: String {
+        let checked = ways.contains { option in
+            if case .checked = option.luggage { return true }
+            return false
+        }
+        return checked
+            ? "地図は徒歩経路。時間は目安です。宿の荷物預かりはAIが調べた公開情報です。ロッカーや席の空き・営業時間は確認していません。"
+            : "地図は徒歩経路。時間は目安です。荷物預かり・ロッカーや席の空き・営業時間は確認していません。"
+    }
+
     func edit(states: Set<ActionState>, strength: TiredStrength?) {
         self.states = states
         self.strength = strength
