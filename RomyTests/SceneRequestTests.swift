@@ -11,79 +11,84 @@ struct SceneRequestTests {
         return item
     }
 
+    private func request(
+        _ plans: [ItineraryItem], states: Set<ActionState> = [.tired], strength: TiredStrength? = .quite
+    ) -> SceneRequest {
+        SceneRequest(id: plans[0].id, plans: plans.map { $0.snapshot() }, states: states, strength: strength)
+    }
+
     @Test func theStayAndTheFixedPlanAfterItAreBothTakenFromTheItinerary() throws {
         let now = plan("今の予定", order: 0)
         let hotel = plan("宿", order: 1, kind: .stay)
         hotel.notBeforeMinutes = 900
         let dinner = plan("予約", order: 2, fixed: 1020)
-        let request = SceneRequest(id: now.id, plans: [now, hotel, dinner].map { $0.snapshot() },
-                                   states: [.tired, .heavyLuggage], strength: .quite)
-        let result = try request.input(origin: request.currentPlace, nowMinutes: 840).get()
+        let request = request([now, hotel, dinner], states: [.tired, .heavyLuggage])
+        let result = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 90).get()
         #expect(result.stay?.checkInMinutes == 900)
-        #expect(result.nextTitle == "予約")
-        #expect(result.nextStartMinutes == 1020)
+        #expect(result.next?.title == "予約")
+        #expect(result.endMinutes == 1020)
         #expect(result.hasHeavyLuggage)
         #expect(result.strength == .quite)
     }
 
-    @Test func aFixedPlanWithoutAPlaceIsNotSilentlySkipped() {
+    @Test func aFixedPlanWithoutAPlaceStillEndsTheTimeAndIsNotSkipped() throws {
         let now = plan("今", order: 0)
         let first = plan("最初の予約", order: 1, fixed: 900)
         first.latitude = nil
         let later = plan("後の予約", order: 2, fixed: 1020)
-        let request = SceneRequest(
-            id: now.id,
-            plans: [now, first, later].map { $0.snapshot() },
-            states: [.hungry],
-            strength: nil
-        )
-        #expect(throws: SceneRequest.Issue.needsNextPlace) {
-            try request.input(origin: request.currentPlace, nowMinutes: 840).get()
-        }
+        let request = request([now, first, later], states: [.hungry], strength: nil)
+        let result = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 90).get()
+        #expect(result.end == .plan(title: "最初の予約", place: nil))
+        #expect(result.endMinutes == 900)
+        #expect(result.next == nil)
     }
 
-    @Test func anUnknownCheckInIsNotTreatedAsOpenNow() {
+    @Test func withoutAFixedPlanTheStaysCheckInEndsTheTime() throws {
         let now = plan("今", order: 0)
         let hotel = plan("宿", order: 1, kind: .stay)
-        let dinner = plan("予約", order: 2, fixed: 1020)
-        let request = SceneRequest(
-            id: now.id,
-            plans: [now, hotel, dinner].map { $0.snapshot() },
-            states: [.tired],
-            strength: .quite
-        )
-        #expect(throws: SceneRequest.Issue.needsCheckIn) {
-            try request.input(origin: request.currentPlace, nowMinutes: 840).get()
+        hotel.notBeforeMinutes = 900
+        let later = plan("目安だけの予定", order: 2)
+        let request = request([now, hotel, later], states: [.heavyLuggage])
+        let result = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 90).get()
+        #expect(result.end == .checkIn)
+        #expect(result.endMinutes == 900)
+        #expect(result.stay?.title == "宿")
+        // The plan after the stay is left where it is.
+        #expect(request.ahead(nowMinutes: 840)?.between.isEmpty == true)
+    }
+
+    @Test func withNothingToEndTheTimeTheChosenLengthIsUsedAndATimeIsNeverGuessed() throws {
+        let now = plan("今", order: 0)
+        let later = plan("目安だけの予定", order: 1)
+        let unknownCheckIn = plan("宿", order: 2, kind: .stay)
+        let request = request([now, later, unknownCheckIn], states: [.hungry], strength: nil)
+        let result = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 120).get()
+        #expect(result.end == .chosen)
+        #expect(result.endMinutes == 960)
+        #expect(result.stay == nil)
+        #expect(request.ahead(nowMinutes: 840)?.between.isEmpty == true)
+        #expect(throws: SceneRequest.Issue.needsLocation) {
+            try request.input(origin: nil, nowMinutes: 840, chosenMinutes: 120).get()
         }
     }
 
-    @Test func aGuessedTimeIsNotUsedAsAFixedDeadlineAndMissingLocationIsExplicit() {
+    @Test func aStayAlreadyOpenCanBeEnteredWithinTheChosenLength() throws {
         let now = plan("今", order: 0)
-        let later = plan("目安だけの予定", order: 1)
-        let request = SceneRequest(
-            id: now.id,
-            plans: [now, later].map { $0.snapshot() },
-            states: [.hungry],
-            strength: nil
-        )
-        #expect(throws: SceneRequest.Issue.needsFixedPlan) {
-            try request.input(origin: request.currentPlace, nowMinutes: 840).get()
-        }
-        #expect(throws: SceneRequest.Issue.needsLocation) { try request.input(origin: nil, nowMinutes: 840).get() }
+        let hotel = plan("宿", order: 1, kind: .stay)
+        hotel.notBeforeMinutes = 780
+        let request = request([now, hotel])
+        let result = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 90).get()
+        #expect(result.end == .chosen)
+        #expect(result.stay?.checkInMinutes == 780)
     }
 
     @Test func changingTheItineraryDoesNotMutateTheSearchSnapshot() throws {
         let now = plan("今", order: 0)
         let next = plan("予約", order: 1, fixed: 1020)
-        let request = SceneRequest(
-            id: now.id,
-            plans: [now, next].map { $0.snapshot() },
-            states: [.hungry],
-            strength: .very
-        )
+        let request = request([now, next], states: [.hungry], strength: .very)
         next.fixedStartMinutes = 900
-        let input = try request.input(origin: request.currentPlace, nowMinutes: 840).get()
-        #expect(input.nextStartMinutes == 1020)
+        let input = try request.input(origin: request.currentPlace, nowMinutes: 840, chosenMinutes: 90).get()
+        #expect(input.endMinutes == 1020)
         #expect(input.strength == nil)
     }
 

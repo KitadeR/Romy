@@ -42,7 +42,8 @@ struct SceneApply {
     ) -> Result<SceneApply, Problem> {
         guard way.fits else { return .failure(.doesNotFit) }
         guard nowMinutes - searchedAtMinutes <= freshMinutes else { return .failure(.tooLate) }
-        guard let current = request.current, let day = current.day, let ahead = request.ahead() else {
+        guard let current = request.current, let day = current.day,
+              let ahead = request.ahead(nowMinutes: searchedAtMinutes) else {
             return .failure(.changed)
         }
         let duration = request.currentStartMinutes.map { max(5, searchedAtMinutes - $0) } ?? current.durationMinutes

@@ -75,3 +75,6 @@ fastlane/test_output
 # Cache of the sights build (Tools/sights/build_sights.py)
 Tools/sights/.cache/
 __pycache__/
+
+## Romy relay (address and the app passphrase; see server/relay/Relay.plist.example)
+Romy/Config/Relay.plist

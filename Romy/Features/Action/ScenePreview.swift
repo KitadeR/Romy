@@ -14,7 +14,7 @@ struct ScenePreview: View {
     }
 
     private var skipped: [ItineraryItemSnapshot] {
-        guard let ahead = request.ahead() else { return [] }
+        guard let ahead = request.ahead(nowMinutes: input.nowMinutes) else { return [] }
         return ahead.between.filter { $0.id != ahead.stay?.id }
     }
 
@@ -29,7 +29,7 @@ struct ScenePreview: View {
                     Text("徒歩 \(step.walkBeforeMinutes)分").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                         .padding(.leading, 60)
                     row(
-                        time: step.kind == .next ? input.nextStartMinutes : step.startMinutes,
+                        time: step.kind == .next ? input.endMinutes : step.startMinutes,
                         title: "\(step.kind.emoji) \(step.planTitle)", detail: detail(of: step), tag: tag(of: step)
                     )
                 }
@@ -53,7 +53,14 @@ struct ScenePreview: View {
     }
 
     private var caption: String {
-        var parts = ["\(DaySchedule.clock(input.nextStartMinutes))の\(input.nextTitle)は動かさない"]
+        var parts: [String] = []
+        switch input.end {
+        case let .plan(title, _): parts.append("\(DaySchedule.clock(input.endMinutes))の\(title)は動かさない")
+        case .checkIn: break
+        case .chosen:
+            let length = DurationText.text(minutes: input.endMinutes - input.nowMinutes)
+            parts.append("\(DaySchedule.clock(input.endMinutes))まで（\(length)）")
+        }
         if let opens = input.stay?.checkInMinutes, opens > input.nowMinutes {
             parts.append("\(DaySchedule.clock(opens))より前はチェックインできない")
         }

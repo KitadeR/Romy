@@ -16,18 +16,33 @@ struct SceneInput {
         let checkInMinutes: Int?
     }
 
+    /// What ends the time the ways fill (SceneRequest.input).
+    enum End: Equatable {
+        /// A fixed plan ahead; the ways walk to it when it has a place.
+        case plan(title: String, place: ProposalPlace?)
+        /// The stay's check-in, with no fixed plan after it today.
+        case checkIn
+        /// The length the person chose, when nothing in the itinerary ends the time.
+        case chosen
+    }
+
     let nowMinutes: Int
     let origin: ProposalPlace
-    /// The stay between now and the next fixed plan, when there is one.
+    /// The stay between now and the end, when there is one.
     let stay: Stay?
-    let nextTitle: String
-    let next: ProposalPlace
-    /// The next plan's start; it is not moved.
-    let nextStartMinutes: Int
+    let end: End
+    /// When the time ends: the fixed plan's start, the check-in, or now plus the chosen length. It is not moved.
+    let endMinutes: Int
     let states: Set<ActionState>
     let strength: TiredStrength?
 
     var hasHeavyLuggage: Bool { states.contains(.heavyLuggage) }
+
+    /// The fixed plan the ways walk to at the end, when there is one with a place.
+    var next: (title: String, place: ProposalPlace)? {
+        if case let .plan(title, place?) = end { return (title, place) }
+        return nil
+    }
 }
 
 /// One way through the time until the next plan, with every time counted in code.
@@ -59,7 +74,28 @@ struct SceneWay: Equatable {
     /// Only used for the order, never shown (Notion 02 §6-4, 2026-10-22 ④).
     let carryMinutes: Int
 
+    var leavesLuggageAtStay: Bool { steps.contains { $0.kind == .dropLuggage } }
+
+    /// The same way once the stay is known to keep luggage: 「先に荷物を手放して…」 and no 「？」 on the drop.
+    /// The times do not change; the order is only made again the next time (Figma 23 2版 02).
+    func knowingLuggageIsKept() -> SceneWay {
+        let known = steps.map { step in
+            guard step.kind == .dropLuggage else { return step }
+            return SceneStep(
+                kind: step.kind, title: step.title, place: step.place, walkBeforeMinutes: step.walkBeforeMinutes,
+                arriveMinutes: step.arriveMinutes, startMinutes: step.startMinutes, leaveMinutes: step.leaveMinutes,
+                isUnknown: false
+            )
+        }
+        return SceneWay(
+            reason: reason == .dropIfAllowed ? .dropFirst : reason, steps: known, walkMinutes: walkMinutes,
+            sitMinutes: sitMinutes, slackMinutes: slackMinutes, carryMinutes: carryMinutes
+        )
+    }
+
     var fits: Bool { slackMinutes >= 0 }
+    /// The way walks to a fixed plan at the end, so its spare minutes mean something.
+    var endsAtPlan: Bool { steps.last?.kind == .next }
     var shortfallMinutes: Int { max(0, -slackMinutes) }
     var hasUnknown: Bool { steps.contains { $0.isUnknown } }
     var addedPlaces: Int {
@@ -110,7 +146,7 @@ enum ActionScene {
         _ input: SceneInput, search: @escaping CandidateSearch, walking: WalkingTime,
         luggageCheck: LuggageCheck = { _ in .unknown }
     ) async -> [SceneWay] {
-        let available = input.nextStartMinutes - input.nowMinutes
+        let available = input.endMinutes - input.nowMinutes
         let usual = WalkLimit.oneWayMinutes(availableMinutes: available, walkLess: false)
         let oneWay = input.strength?.oneWayCapMinutes.map { min($0, usual) } ?? usual
         let radius = WalkLimit.meters(minutes: oneWay)
@@ -141,7 +177,7 @@ enum ActionScene {
         } else if let stay = input.stay {
             plans += openStayWays(input, stay: stay, seats: seatsHere)
         } else {
-            let least = leastDetour(seatsHere, from: input.origin, to: input.next)
+            let least = leastDetour(seatsHere, from: input.origin, to: input.next?.place ?? input.origin)
             for (index, place) in ordered(seatsHere, least: least).enumerated() {
                 plans.append((index == 0 ? .leastWalk : .otherSeat, [Planned(seatKind, place.name, place)]))
             }
@@ -149,7 +185,7 @@ enum ActionScene {
 
         var ways: [SceneWay] = []
         for (reason, steps) in plans {
-            let all = steps + [Planned(.next, input.nextTitle, input.next)]
+            let all = steps + (input.next.map { [Planned(.next, $0.title, $0.place)] } ?? [])
             guard let way = await timed(reason, all, input: input, walking: walking), way.addedPlaces <= maxAdded
             else { continue }
             // The radius only selects candidates. A river or station may make the actual walk much longer.
@@ -214,7 +250,9 @@ enum ActionScene {
         let seatsNearStay = context.nearHereOnly ? [] : await ActionCandidates.gather(
             for: context.seat, near: stay.place, radiusMeters: context.radius, search: context.search
         ).places
-        if let byStay = seatsNearStay.first(where: { $0.name != context.least?.name }) ?? seatsNearStay.first {
+        // A stay that officially keeps no luggage is not offered (Notion 02 §6-4, 2026-10-28・29).
+        if check != .contradicted,
+           let byStay = seatsNearStay.first(where: { $0.name != context.least?.name }) ?? seatsNearStay.first {
             plans.append((known ? .dropFirst : .dropIfAllowed, [
                 Planned(.dropLuggage, stay.title, stay.place, unknown: !known),
                 Planned(context.seatKind, byStay.name, byStay),
@@ -268,9 +306,9 @@ enum ActionScene {
 
     // MARK: - ④ Counting the time
 
-    /// The times of a way. A rest or meal before check-in grows until the stay opens; the room after check-in,
-    /// or the last rest when there is no stay, grows until it is time to leave for the next plan
-    /// (`ActionGap.marginMinutes` before it). Nil when a walk has no answer.
+    /// The times of a way. A rest or meal before check-in grows until the stay opens; the room after check-in, or
+    /// the last rest when there is no stay, grows until it is time to leave for the next plan (`marginMinutes`
+    /// before it), or until the end when there is no plan to walk to. Nil when a walk has no answer.
     static func timed(
         _ reason: SceneWay.Reason, _ planned: [Planned], input: SceneInput, walking: WalkingTime
     ) async -> SceneWay? {
@@ -281,15 +319,16 @@ enum ActionScene {
             walks.append(minutes)
             from = step.place
         }
-        let deadline = input.nextStartMinutes - ActionGap.marginMinutes
+        let hasNext = planned.last?.kind == .next
+        let deadline = input.endMinutes - (hasNext ? ActionGap.marginMinutes : 0)
         let checkInIndex = planned.firstIndex { $0.kind == .checkIn }
         var stays = planned.map(\.kind.minimumMinutes)
 
-        // Before check-in (or before the next plan when there is no stay), the last seat takes the spare time.
-        let split = checkInIndex ?? planned.count - 1
-        let firstPart = (0...split).reduce(input.nowMinutes) { time, index in
-            time + walks[index] + (index < split ? stays[index] : 0)
-        }
+        // Before check-in (or before the next plan, or the end, when there is no stay), the last seat takes the
+        // spare time.
+        let split = checkInIndex ?? (hasNext ? planned.count - 1 : planned.count)
+        let firstPart = (0..<split).reduce(input.nowMinutes) { time, index in time + walks[index] + stays[index] }
+            + (split < planned.count ? walks[split] : 0)
         let opens = checkInIndex.flatMap { _ in input.stay?.checkInMinutes } ?? input.nowMinutes
         let target = checkInIndex == nil ? deadline : max(firstPart, opens)
         if let seat = (0..<split).last(where: { planned[$0].kind.isSeated }) {
@@ -318,11 +357,14 @@ enum ActionScene {
                 arriveMinutes: arrive, startMinutes: start, leaveMinutes: time, isUnknown: step.unknown
             ))
         }
-        let arrival = steps.last?.arriveMinutes ?? input.nowMinutes
+        // Arriving at the fixed plan counts; without one, leaving the last stop. Reaching the stay after it opens
+        // is never late when its check-in is the end.
+        let arrival = hasNext ? steps.last?.arriveMinutes : steps.last?.leaveMinutes
+        let slack = input.endMinutes - (arrival ?? input.nowMinutes)
         let sit = steps.filter(\.kind.isSeated).reduce(0) { $0 + $1.leaveMinutes - $1.startMinutes }
         return SceneWay(
             reason: reason, steps: steps, walkMinutes: walks.reduce(0, +), sitMinutes: sit,
-            slackMinutes: input.nextStartMinutes - arrival,
+            slackMinutes: input.end == .checkIn ? max(0, slack) : slack,
             carryMinutes: carryUntil(steps) - input.nowMinutes
         )
     }

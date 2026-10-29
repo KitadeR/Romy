@@ -1,0 +1,18 @@
+{
+  "name": "romy-relay",
+  "private": true,
+  "description": "Romy's relay: holds the API key, checks facts with the search AI, caches results and keeps the spending caps (Notion 04, 2026-10-28〜29).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:local": "wrangler d1 migrations apply romy-relay --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261028.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.154.0"
+  }
+}

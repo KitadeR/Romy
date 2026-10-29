@@ -138,7 +138,7 @@ struct ActionHomeSheet: View {
             .presentationDetents([.large])
         }
         .sheet(item: $proposing, onDismiss: showApplied) { request in
-            ActionSceneSheet(request: request) { change in
+            ActionSceneSheet(request: request, facts: .live(trip: trip)) { change in
                 let problem = onApplyScene(change)
                 if problem == nil {
                     applied = true
