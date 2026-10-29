@@ -1,0 +1,16 @@
+{
+  "counts": {
+    "wikipedia_or_guess": 1516,
+    "wikidata_property": 823,
+    "wikidata_kana_alias": 161
+  },
+  "wikidata_total": 984,
+  "normalized_readings_not_found_in_output": [],
+  "report_expected_wikidata": 984,
+  "report_other": 1516,
+  "checked_on": "2026-10-29",
+  "method": "properties(P1814) plus pure-kana aliases, matching build_sights.py preprocessing",
+  "interpretation": "823 property readings + 161 kana aliases = 984 Wikidata readings. The earlier claimed mismatch was a review mistake; no dataset inconsistency was found.",
+  "individual_wikipedia_vs_guessed_origin": "Not individually reconstructable from these cache files; historical report states 1465 Wikipedia / 51 guessed.",
+  "dataset_sha256": "bd28cc20cac5ea739b854bd0a4e8c07aaec7f5b5b521bfa432b7b9181d52539a"
+}
