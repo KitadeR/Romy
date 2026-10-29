@@ -111,6 +111,14 @@ struct ActionSceneTests {
         #expect(ways.first?.reason != .locker)
     }
 
+    @Test func aStayThatKeepsNoLuggageIsNotOffered() async {
+        let ways = await ActionScene.build(
+            input([.tired, .heavyLuggage]), search: search, walking: walking, luggageCheck: { _ in .contradicted }
+        )
+        #expect(!ways.contains { $0.leavesLuggageAtStay })
+        #expect(ways.contains { $0.reason == .locker })
+    }
+
     @Test func withoutLuggageThereIsNoDropOrLocker() async {
         let ways = await ActionScene.build(input([.tired]), search: search, walking: walking)
         #expect(!ways.isEmpty)

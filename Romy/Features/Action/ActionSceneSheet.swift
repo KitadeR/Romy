@@ -15,8 +15,11 @@ struct ActionSceneSheet: View {
     /// Puts the confirmed way into the itinerary; returns why it could not, or nil once it is in.
     let onApply: (SceneApply) -> SceneApply.Problem?
 
-    init(request: SceneRequest, onApply: @escaping (SceneApply) -> SceneApply.Problem?) {
-        _model = State(initialValue: ActionSceneModel(request: request))
+    init(
+        request: SceneRequest, facts: LuggageFacts = .off,
+        onApply: @escaping (SceneApply) -> SceneApply.Problem?
+    ) {
+        _model = State(initialValue: ActionSceneModel(request: request, facts: facts))
         self.onApply = onApply
     }
 

@@ -23,6 +23,8 @@ struct AddStaySheet: View {
     /// The suggestion being looked up after it was tapped.
     @State var resolvingID: String?
     @FocusState var isTyping: Bool
+    /// After a hotel or an Airbnb・民泊 is added, until the person answers whether Romy may check it.
+    @State var askingConsent = false
 
     let text = DateText(calendar: .current, holidays: .bundled)
     var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
@@ -67,7 +69,19 @@ struct AddStaySheet: View {
         .onChange(of: day) { _, _ in
             if let maxNights { nights = min(nights, maxNights) }
         }
+        .sheet(isPresented: $askingConsent, onDismiss: closeAfterConsent, content: consentSheet)
     }
+
+    private func consentSheet() -> some View {
+        LuggageConsentSheet { answer in
+            UserDefaults.standard.set(answer.rawValue, forKey: LuggageConsent.key)
+            askingConsent = false
+        }
+        // A sheet from below over the stay just added, not a full screen (Figma 23 2版 05).
+        .presentationDetents([.fraction(0.72)])
+    }
+
+    private func closeAfterConsent() { dismiss() }
 
     private var header: some View {
         HStack {
@@ -126,7 +140,11 @@ struct AddStaySheet: View {
             }
         }
         onAdded(item)
-        dismiss()
+        if kind == .hotel || kind == .rental, place != nil, LuggageConsent.current != .allowed {
+            askingConsent = true
+        } else {
+            dismiss()
+        }
     }
 
     /// A suggestion has no place yet, so it is looked up first.

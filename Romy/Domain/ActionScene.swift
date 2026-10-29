@@ -59,6 +59,25 @@ struct SceneWay: Equatable {
     /// Only used for the order, never shown (Notion 02 §6-4, 2026-10-22 ④).
     let carryMinutes: Int
 
+    var leavesLuggageAtStay: Bool { steps.contains { $0.kind == .dropLuggage } }
+
+    /// The same way once the stay is known to keep luggage: 「先に荷物を手放して…」 and no 「？」 on the drop.
+    /// The times do not change; the order is only made again the next time (Figma 23 2版 02).
+    func knowingLuggageIsKept() -> SceneWay {
+        let known = steps.map { step in
+            guard step.kind == .dropLuggage else { return step }
+            return SceneStep(
+                kind: step.kind, title: step.title, place: step.place, walkBeforeMinutes: step.walkBeforeMinutes,
+                arriveMinutes: step.arriveMinutes, startMinutes: step.startMinutes, leaveMinutes: step.leaveMinutes,
+                isUnknown: false
+            )
+        }
+        return SceneWay(
+            reason: reason == .dropIfAllowed ? .dropFirst : reason, steps: known, walkMinutes: walkMinutes,
+            sitMinutes: sitMinutes, slackMinutes: slackMinutes, carryMinutes: carryMinutes
+        )
+    }
+
     var fits: Bool { slackMinutes >= 0 }
     var shortfallMinutes: Int { max(0, -slackMinutes) }
     var hasUnknown: Bool { steps.contains { $0.isUnknown } }
@@ -214,7 +233,9 @@ enum ActionScene {
         let seatsNearStay = context.nearHereOnly ? [] : await ActionCandidates.gather(
             for: context.seat, near: stay.place, radiusMeters: context.radius, search: context.search
         ).places
-        if let byStay = seatsNearStay.first(where: { $0.name != context.least?.name }) ?? seatsNearStay.first {
+        // A stay that officially keeps no luggage is not offered (Notion 02 §6-4, 2026-10-28・29).
+        if check != .contradicted,
+           let byStay = seatsNearStay.first(where: { $0.name != context.least?.name }) ?? seatsNearStay.first {
             plans.append((known ? .dropFirst : .dropIfAllowed, [
                 Planned(.dropLuggage, stay.title, stay.place, unknown: !known),
                 Planned(context.seatKind, byStay.name, byStay),
