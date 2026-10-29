@@ -86,6 +86,7 @@
 
 - [フォント・データの出典と利用条件](THIRD_PARTY_NOTICES.md)
 - [取得・加工の記録と同梱確認](docs/data-sources.md)
+- [アプリへの出典表示の組み込み手順](docs/attribution-integration.md)
 - [観光地2,500件の元記事索引](docs/data-sources/sights-source-index.csv)
 
 既存のフォントの著作権表示とOFL原文を保持しています。Wikipedia由来の読みの個別の扱い、アプリ内で出典を開く導線と提出版への表示の同梱は、最終確認事項として残しています。
