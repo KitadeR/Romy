@@ -20,6 +20,8 @@ struct FirstHomeView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
             Spacer()
+            AttributionButton()
+                .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.surface.ignoresSafeArea())
