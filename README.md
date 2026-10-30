@@ -10,7 +10,8 @@
 
 - [簡易仕様書（公式12項目）](docs/specification.md)
 - [画面の流れ（スクリーンショット8枚）](docs/specification.md#screens)
-- [フォント・データの出典と利用条件](THIRD_PARTY_NOTICES.md)
+- [フォント・データ・画像の出典](THIRD_PARTY_NOTICES.md)
+- [写真の掲載元URL・生成画像](docs/image-sources.md)
 - [データの取得・加工方法](docs/data-sources.md)
 
 ## 動作環境

@@ -1,6 +1,6 @@
-# 第三者のフォント・データに関する表示
+# 第三者のフォント・データ・画像に関する表示
 
-確認日：2026年10月29日。対象はRomyに同梱しているフォントと検索・日付用データです。取得・加工の詳細と確認が残る点は[データの出典記録](docs/data-sources.md)に記載しています。
+更新日：2026年10月30日。Romyに同梱しているフォント、検索・日付用データと、画面に使用している画像の出典を記録しています。データの取得・加工方法は[データの出典記録](docs/data-sources.md)に記載しています。
 
 ## フォント
 
@@ -49,6 +49,10 @@ Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotyp
 - [配布元](https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html)
 - [内閣府の利用規約](https://www.cao.go.jp/notice/rule.html)
 - [公共データ利用規約1.0](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)
+
+## 画像
+
+画面に使用している写真の掲載元URLと生成画像は、[画像の出典](docs/image-sources.md)にまとめています。
 
 ## この表示の範囲
 
