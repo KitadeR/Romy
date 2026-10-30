@@ -10,7 +10,6 @@
 | 京都駅（`fenrir-kyoto-station.png`） | 京都駅の予定カード・図3／8 | [京都市公式 京都観光Navi「JR京都駅」](https://ja.kyoto.travel/tourism/single01.php?category_id=8&tourism_id=707) |
 | 東本願寺（`fenrir-higashi-honganji.png`） | 東本願寺の予定カード・図3 | [真宗大谷派（東本願寺）「東本願寺について」](https://www.higashihonganji.or.jp/about/higashihonganji/) |
 | ホテルグランヴィア京都（`fenrir-granvia.png`） | ホテル・荷物預けの予定カード・図3／8 | [Wikipedia「ホテルグランヴィア京都」](https://ja.wikipedia.org/wiki/%E3%83%9B%E3%83%86%E3%83%AB%E3%82%B0%E3%83%A9%E3%83%B3%E3%83%B4%E3%82%A3%E3%82%A2%E4%BA%AC%E9%83%BD) |
-| イノダコーヒ ポルタ支店（`fenrir-cafe-a.png`） | A案の比較・詳細と休憩の予定カード・図5／6／8 | [Leaf KYOTO「京都駅で老舗喫茶［イノダコーヒ ポルタ支店］自慢のコーヒーを」](https://www.leafkyoto.net/store/221116-kyoto-inodacoffeeporta/) |
 
 画像ファイルは `Romy/Resources/FenrirCapture/` に収録しています。画面内では表示枠に合わせて拡大・切り取りを行っています。
 
