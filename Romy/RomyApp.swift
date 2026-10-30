@@ -16,9 +16,19 @@ struct RomyApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if FenrirCapture.screen != nil {
+                FenrirCaptureHost()
+                    .modelContainer(FenrirCapture.container)
+            } else {
+                RootView()
+                    .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
+            }
+            #else
             RootView()
+                .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
+            #endif
         }
-        .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
     }
 }
 
@@ -26,6 +36,7 @@ struct RomyApp: App {
 struct RootView: View {
     @Query(sort: \Trip.lastOpenedAt, order: .reverse) private var trips: [Trip]
     @State private var isCreating = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -40,6 +51,10 @@ struct RootView: View {
                             .presentationDetents([.large])
                     }
             }
+        }
+        // The stays of today and tomorrow are checked ahead, so Romy Now does not wait (Notion 02 §6-4 事実の確認⑤).
+        .task(id: scenePhase) {
+            if scenePhase == .active { await LuggagePrefetch.run(trips: trips) }
         }
     }
 }

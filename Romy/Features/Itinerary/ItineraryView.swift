@@ -3,7 +3,7 @@ import SwiftUI
 /// The itinerary tab (Notion 02 §6-3, §6-5, §6-6; Figma page 6 124:2 and 「16.」).
 /// The map sits behind; the itinerary is Apple's sheet over it with three heights, and the map stays touchable
 /// at the small and middle heights (`presentationBackgroundInteraction`, like Apple Maps).
-/// The sheet covers the bottom of the screen, so the menu bar and ＋ are drawn inside it.
+/// The menu bar and ＋ float over the sheet in a window of their own (`FloatingLayer`, 2026-10-29).
 /// In Action (the day before the trip to its last day) today's plans get 済み marks, 今 and the painted
 /// line (Notion 02 §6-5). A plan opens its detail inside the same sheet (`PlanDetailView`).
 struct ItineraryView<Bar: View, Other: View, Back: View>: View {
@@ -66,11 +66,6 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     }
     /// Raised without animation when the tab opens, so the sheet is there at once instead of sliding up each time.
     @State private var isSheetPresented = false
-    /// Where the sheet's content is drawn on the screen, and the size it is laid out in. iOS 26 draws a sheet that
-    /// is not full height a little smaller and off the screen's sides; the menu bar undoes that (`barFit`).
-    @State var sheetFrame: CGRect = .zero
-    @State var sheetLayout: CGSize = .zero
-    @State var screen = ScreenMetrics()
     @State var otherDetent = OtherDetent()
     /// The itinerary's own height, kept while another tab holds the sheet at full height.
     @State var itineraryDetent: PresentationDetent = Self.middle
@@ -80,9 +75,9 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
     let text = DateText(calendar: .current, holidays: .bundled)
     private var days: ItineraryDays { ItineraryDays(dates: trip.dates, text: text) }
     private var hasDates: Bool { trip.dates != .undecided }
-    var isAction: Bool { TripPhase(dates: trip.dates, today: .now, calendar: text.calendar) == .action }
+    var isAction: Bool { TripPhase(dates: trip.dates, today: RomyClock.now, calendar: text.calendar) == .action }
     /// The day of the trip that today is; 今 and スキップ exist only there.
-    var todayNumber: Int? { trip.dates.dayNumber(on: .now, calendar: text.calendar) }
+    var todayNumber: Int? { trip.dates.dayNumber(on: RomyClock.now, calendar: text.calendar) }
     var detailItem: ItineraryItem? {
         detailID.flatMap { id in trip.items.first { $0.id == id } }
     }
@@ -93,6 +88,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
             if !isActive { background(homeActions) }
         }
         .background(Theme.base.ignoresSafeArea())
+        .background(FloatingLayer(isShown: showsBar, content: bar))
         .sheet(isPresented: $isSheetPresented) {
             sheet
                 .presentationDetents(
@@ -129,16 +125,7 @@ struct ItineraryView<Bar: View, Other: View, Back: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // The detail has its own buttons at the bottom, so the menu bar is only drawn with the list.
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sheetFrame = $0 }
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { sheetLayout = $0 }
         .overlay(alignment: .bottom) { if showsBar { barFade } }
-        .overlay {
-            if showsBar {
-                bar()
-                    .scaleEffect(barFit.scale, anchor: .bottom)
-                    .offset(x: barFit.shiftX, y: barFit.shiftY)
-            }
-        }
         .sheet(isPresented: $isAddingDestinations) {
             AddDestinationsSheet(trip: trip)
                 .presentationDetents([.large])

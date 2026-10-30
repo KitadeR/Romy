@@ -1,83 +1,66 @@
-# フォント・データの出典と確認記録
+# フォント・データの出典と加工方法
 
-確認日：2026年10月29日。[出典表示の入口](../THIRD_PARTY_NOTICES.md)へ戻る。
-
-この記録は取得元・加工方法・現物との対応を残すためのものです。確認日、元データの対象時点、取得・生成日は別々に記載し、記録がない取得日を推定で埋めていません。
+記録日：2026年10月30日。[出典表示の入口](../THIRD_PARTY_NOTICES.md)へ戻る。
 
 ## フォント
 
-| 対象 | 配置 | 条件の原文 |
+| フォント | 同梱ファイル | 利用条件の原文 |
 | --- | --- | --- |
-| Zen Kaku Gothic New | Resources/Fonts内のRegular／Medium／Bold | [OFL-ZenKakuGothicNew.txt](../Romy/Resources/Fonts/OFL-ZenKakuGothicNew.txt) |
-| Plus Jakarta Sans | Resources/Fonts/PlusJakartaSans.ttf | [OFL-PlusJakartaSans.txt](../Romy/Resources/Fonts/OFL-PlusJakartaSans.txt) |
+| Zen Kaku Gothic New | Regular／Medium／Bold | [OFL-ZenKakuGothicNew.txt](../Romy/Resources/Fonts/OFL-ZenKakuGothicNew.txt) |
+| Plus Jakarta Sans | PlusJakartaSans.ttf | [OFL-PlusJakartaSans.txt](../Romy/Resources/Fonts/OFL-PlusJakartaSans.txt) |
 
-両方とも保存済み原文はSIL OFL 1.1。著作権表示は原文のまま保持しています。[SIL公式FAQ](https://openfontlicense.org/ofl-faq/)のモバイルアプリ同梱に関する説明を確認しました。
-
-手元の最新Debug-iphoneos／Debug-iphonesimulatorのRomy.appで、フォント4ファイルとOFL原文2ファイルが存在し、リポジトリの同名ファイルとSHA-256が一致することを確認しました。今回新たなビルドは実行していません。この結果は既存の開発用成果物の確認であり、提出するArchive／IPAの確認済みという意味ではありません。
-
-アプリ内でフォント・データの出典をまとめて閲覧する画面は今回確認できていません。組み込み用に[出典表示とOFL原文をまとめたTXT](../Romy/Resources/Acknowledgements/RomyAttributions.txt)、[直接URL付きの2,500件の索引CSV](../Romy/Resources/Acknowledgements/RomySourceArticles.csv)を文書ブランチへ準備しました。[組み込みと確認手順](attribution-integration.md)に従い、提出版への統合・同梱と閲覧画面を確認します。現時点で新しい2ファイルを含むアプリのビルド・動作確認は行っていません。
+両フォントの著作権表示とSIL OFL 1.1の原文を保持しています。フォント4ファイル・OFL原文2ファイルと、[出典表示TXT](../Romy/Resources/Acknowledgements/RomyAttributions.txt)をアプリに同梱しています。「出典・ライセンス」画面から、フォントの著作権表示とライセンス全文を閲覧できます。
 
 ## 観光地データ
 
-### 現物と生成記録
+### データと生成処理
 
-- ファイル：[sights.json](../Romy/Resources/Data/sights.json)、2,500件。
-- 生成処理：[build_sights.py](../Tools/sights/build_sights.py)、読み推定：[reading.swift](../Tools/sights/reading.swift)。
-- [既存の取得元・再生成方法](../Tools/sights/README.md)。今回データの再生成・ネットワークからの全件再取得はしていません。
-- 生成レポートの日付：2026年10月15日。内訳の記録はWikidataの読み984件／Wikipedia冒頭の読み1,465件／推定51件です。これは当時のレポート値であり、今回の再実行結果ではありません。
+- データ：[sights.json](../Romy/Resources/Data/sights.json)、2,500件。
+- 生成処理：[build_sights.py](../Tools/sights/build_sights.py)。読みの推定：[reading.swift](../Tools/sights/reading.swift)。
+- 再生成方法：[Tools/sights/README.md](../Tools/sights/README.md)。
+- 名称・別名・読み・位置情報等を、旅行作成時の行き先検索に利用しています。通常の予定を追加するMapKitの場所検索とは、利用範囲を分けています。
 
-### 取得元と加工
+### 取得元と加工内容
 
-1. WikidataのSPARQLで候補・日本語名・位置を取得し、別名や読み等を補います。対象は構造化データで、[公式条件はCC0](https://www.wikidata.org/wiki/Wikidata:Licensing)です。
-2. 日本語WikipediaのMediaWiki API（prop=pageviews）から直近60日の閲覧数を取得し、候補選定に利用します。[Wikimedia Analyticsのデータ利用条件](https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/documentation/access-policy.html)も確認しています。
-3. Wikidataに読みがない場合、MediaWiki API（prop=extracts）の記事冒頭から括弧内の読みを抽出します。長い本文はsights.jsonに保存せず、読みを空白等の除去・ひらがなへの正規化後に保存します。文章の再利用については[Wikimedia利用規約第7節](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content)と[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)を参照し、元ページ・加工内容・ライセンスの表示を用意します。
-4. 読みが取れない名称と別名にはmacOSの読み推定を利用します。
+1. WikidataのSPARQLで候補・日本語名・位置を取得し、読みや別名を補います。[Wikidataの構造化データはCC0](https://www.wikidata.org/wiki/Wikidata:Licensing)です。
+2. 日本語WikipediaのMediaWiki API（prop=pageviews）から直近60日の閲覧数を取得し、候補の順位付けに利用します。[閲覧統計の利用条件](https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/documentation/access-policy.html)を参照してください。
+3. 読みが不足する場合、MediaWiki API（prop=extracts）で取得した日本語Wikipedia記事の冒頭から括弧内の読みを抽出します。長い本文は同梱せず、空白等を除去してひらがなへ正規化した読みを保存しています。
+4. 読みが取得できない名称と別名には、macOSによる読みの推定を含みます。
 
-### 元ページの索引
+Wikipedia由来の読みには、元記事の寄稿者・出典URL・加工内容・[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)へのリンクを出典表示に収録しています。[Wikimedia利用規約第7節](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use#7._Licensing_of_Content)も参照してください。複数の取得元を含むJSON全体を一括してCC0とは表記していません。
 
-[2,500件の出典索引CSV](data-sources/sights-source-index.csv)は、sights.jsonのQIDと、保存済みcandidates.jsonのQID・記事名を突き合わせた対応表です。全2,500件に対応する記事名が存在することを確認しました。元のキャッシュ全体を公開するのではなく、対象データのIDと記事名だけを取り出しています。
+### 元記事と読みの照合
 
-- Wikidata：`https://www.wikidata.org/wiki/` にwikidata_idを続けたURL。
-- 日本語Wikipedia：`https://ja.wikipedia.org/wiki/` にwikipedia_titleの空白をアンダースコアへ変換し、URLエンコードして続けたURL。各記事の履歴から寄稿者をたどれます。
+[元記事索引CSV](data-sources/sights-source-index.csv)には、2,500件のWikidata IDと対応するWikipedia記事名を収録しています。アプリ用の[直接URL付き索引CSV](../Romy/Resources/Acknowledgements/RomySourceArticles.csv)では、記事名・IDで検索して元サイトを開けます。記事の履歴から寄稿者を確認できます。
 
-この索引は候補・閲覧数・読みの確認に用いた記事を追うための対応表です。「2,500件すべてでWikipediaの読みを抽出した」という意味ではありません。記事の取得時点の版IDや、個々の読みがWikipedia由来か推定かの記録は出力JSONに保存されていません。
+2026年10月15日の生成レポートには、Wikidataの読み984件、Wikipediaから補った読み1,465件、推定51件が記録されています。保存済みデータとの追加照合では、Wikidataの読みプロパティ823件と、かなだけの別名161件の合計984件を確認しました。これらは正規化後の出力JSONと一致しています。[照合結果JSON](data-sources/reading-origin-audit.json)を同梱しています。
 
-### 確認が残ること
-
-- 追加照合で、Wikidataの読みプロパティ823件に、生成処理が取り込むかなだけの別名161件を加えると984件となり、生成レポートと一致することを確認しました。正規化したこれらの読みが出力JSONに含まれることも全件確認しました。前回の「823件と984件が一致しない」という記録は、別名を読みへ加える前処理の見落としでした。[照合結果JSON](data-sources/reading-origin-audit.json)に記録しています。
-- 残る1,516件について、生成レポートにはWikipedia 1,465件・推定51件とありますが、個々のWikipedia抽出結果は保存されていないため、その2種類を1件ずつ確定した分類は作っていません。
-- Wikipediaから抽出した個々の読みの権利範囲・記事別の追加条件、加工データを再配布する際の表示の最終確認は残っています。JSON全体を一律CC0とは宣言しません。
-- 次回再生成時に、読みの取得元の種類・記事URL・取得日または版IDを別途保存すると、追跡を確実にできます。今回は生成コード・検索データは変更していません。
+残る1,516件の個々の読みについて、Wikipedia抽出と推定の区分・記事の取得時点の版IDは保存されていません。索引は、全件でWikipediaから読みを抽出したという意味ではありません。取得日や分類を推定で補ってはいません。
 
 ## 市区町村データ
 
-- ファイル：[municipalities.json](../Romy/Resources/Data/municipalities.json)、1,794件（都道府県の項目等も含むため、市町村だけの数ではありません）。
-- コードの出典コメント：[DestinationCatalog.swift](../Romy/Search/DestinationCatalog.swift)。総務省「全国地方公共団体コード」、2024年1月1日時点。
-- [公式配布ページ](https://www.soumu.go.jp/denshijiti/code.html)の「都道府県コード及び市区町村コード」に2024年1月1日更新の表があることを確認しました。コード・都道府県・名称・読み・都道府県かどうか等を検索用JSONで保持しています。
-- [総務省の利用条件](https://www.soumu.go.jp/menu_kyotsuu/policy/tyosaku.html)はPDL1.0に準拠した利用条件、出典と加工した旨の表示を案内しています。[PDL1.0本文](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)も参照してください。
-- 正確な取得日と、元Excelとの全行照合は今回確認していません。総務省公式データそのものと誤認されないよう、Romy向け加工であることを表示します。
+- データ：[municipalities.json](../Romy/Resources/Data/municipalities.json)、1,794件。都道府県の項目を含み、市町村だけの数ではありません。
+- 出典：総務省「全国地方公共団体コード」の「都道府県コード及び市区町村コード」、2024年1月1日時点。
+- [公式配布ページ](https://www.soumu.go.jp/denshijiti/code.html)／[総務省の利用条件](https://www.soumu.go.jp/menu_kyotsuu/policy/tyosaku.html)／[公共データ利用規約1.0](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)。
+
+北出琉和が、コード・都道府県・名称・読み等をRomyの検索用JSONへ加工しています。元のExcelそのものではありません。正確な取得日は記録していません。
 
 ## 祝日データ
 
-- ファイル：[syukujitsu.csv](../Romy/Resources/Data/syukujitsu.csv)、1,067行（見出しを除く）。最初の日付1955/1/1、最後2027/11/23。CP932で読み取れるCSVです。
-- [公式配布ページ](https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html)／[配布CSV](https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv)。
-- [HolidayCalendar.swift](../Romy/Domain/HolidayCalendar.swift)で読み込み、連休等の候補計算に利用。入力CSVと、Romyが算出・表示する候補を区別します。
-- [内閣府の利用規約](https://www.cao.go.jp/notice/rule.html)で、個別表示がない限りPDL1.0を適用する旨を確認しました。出典表示に加え、Romyによる計算・表示であることを記載します。
-- 正確な取得日は記録から確認できていません。確認日を取得日と偽って記載せず、対象ファイルのハッシュで識別します。
+- データ：[syukujitsu.csv](../Romy/Resources/Data/syukujitsu.csv)、1,067行（見出しを除く）、1955/1/1〜2027/11/23。
+- 出典：内閣府「国民の祝日」についての祝日・休日CSV。
+- [公式配布ページ](https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html)／[配布CSV](https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv)／[内閣府の利用規約](https://www.cao.go.jp/notice/rule.html)／[公共データ利用規約1.0](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)。
 
-## 確認したファイルのSHA-256
+[HolidayCalendar.swift](../Romy/Domain/HolidayCalendar.swift)で読み込み、連休等の日付候補を計算します。計算結果と画面表示はRomyによるものです。正確な取得日は記録していません。
 
-この識別値は、今回調べたファイルと提出版の同一性を後で照合するためのものです。
+## 同梱ファイルの識別値
 
 | ファイル | SHA-256 |
 | --- | --- |
 | Romy/Resources/Data/sights.json | `bd28cc20cac5ea739b854bd0a4e8c07aaec7f5b5b521bfa432b7b9181d52539a` |
 | Romy/Resources/Data/municipalities.json | `e1072cd7eb60634fadeedd09535fc8a87d1fa3ed1aac95ab21054c86adbbf6d4` |
 | Romy/Resources/Data/syukujitsu.csv | `cec37a743c96995cdb9cb52b685c9003634682a9b0e1a640a6b9b96881fe964a` |
-| Romy/Resources/Fonts/OFL-ZenKakuGothicNew.txt | `0fac78a235c98d640cb06332eb5362c211d86fa03c011df438c35005d22ad2c7` |
-| Romy/Resources/Fonts/OFL-PlusJakartaSans.txt | `995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99` |
-| 出典索引CSV | `33d1e9db52d39d6912ec20ce58935e8999c0434572704342f20452fd218dfbe4` |
+| OFL-ZenKakuGothicNew.txt | `0fac78a235c98d640cb06332eb5362c211d86fa03c011df438c35005d22ad2c7` |
+| OFL-PlusJakartaSans.txt | `995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99` |
 
-## 確認方法の補足
-
-2026年10月29日に公式の規約・配布元、生成スクリプト・保存キャッシュ・既存ビルド成果物を読み取り確認しました。総務省のページはブラウズ用ツールで取得できなかったため、同じ公式URLのHTMLを直接取得し、CP932で読み取り確認しています。アプリの実装・生成データ・GitHubの公開設定は変更していません。
+データの再生成・全件再取得は今回行っていません。同梱ファイルと、取得元・加工方法の対応を記録しています。

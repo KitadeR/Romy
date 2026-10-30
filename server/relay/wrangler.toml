@@ -1,0 +1,24 @@
+# Romy's relay (Notion 04「2026-10-28｜中継サーバー」): Cloudflare Workers free plan + D1.
+name = "romy-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# Errors and counts only, never what was sent (Notion 04「2026-10-29｜各社のデータの扱い」④).
+# Request records are off; the Worker writes its own short logs without names, addresses or text.
+[observability]
+enabled = true
+[observability.logs]
+invocation_logs = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "romy-relay"
+# Created 2026-10-29 (stage 3, region APAC). Local runs use their own copy.
+database_id = "4c96f72e-8c3e-4bf8-b0d4-4c847c1f3584"
+migrations_dir = "migrations"
+
+[vars]
+# Spending caps (Notion 04「2026-10-28｜費用の上限」). Kept here so they can change without code.
+DEVICE_DAILY_SEARCHES = "15"
+GLOBAL_DAILY_USD = "0.5"
+RESERVE_USD = "0.02"

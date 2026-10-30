@@ -282,3 +282,12 @@ struct TripCreationView: View {
             .background(RoundedRectangle(cornerRadius: 14).fill(Theme.fill))
     }
 }
+
+#if DEBUG
+extension TripCreationView {
+    init(model: TripCreationModel, onCreate: @escaping (Trip) -> Void) {
+        self.onCreate = onCreate
+        _model = State(initialValue: model)
+    }
+}
+#endif

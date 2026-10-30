@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 extension SceneStep.Kind {
@@ -28,6 +29,11 @@ extension SceneWay {
         }.joined(separator: " › ")
     }
 
+    /// The place the way adds to sit in (a rest or a meal), whose picture leads the card.
+    var seatPlace: ProposalPlace? {
+        steps.first { $0.kind == .rest || $0.kind == .eat }?.place
+    }
+
     var verificationCaption: String {
         if steps.contains(where: { $0.kind == .dropLuggage && $0.isUnknown }) {
             return "？ 宿で預けられるかは未確認です"
@@ -56,10 +62,22 @@ struct SceneWayRow: View {
                         VStack(alignment: .leading, spacing: 8) { title; sit }
                     }
                 }
+                if let seat = option.way.seatPlace {
+                    LookAroundPicture(place: seat)
+                        .opacity(option.isUnavailable ? 0.4 : 1)
+                }
                 Text(option.way.stepsCaption).font(Theme.jp(12, .medium))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("徒歩\(option.way.walkMinutes)分 ・ \(slack) ・ \(option.way.verificationCaption)")
+                    .opacity(option.isUnavailable ? 0.4 : 1)
+                Text(option.way.endsAtPlan || !option.way.fits ? "徒歩\(option.way.walkMinutes)分 ・ \(slack)"
+                     : "徒歩\(option.way.walkMinutes)分")
                     .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(option.isUnavailable ? 0.4 : 1)
+                // A ✗ keeps its own line readable while the rest of the row is dimmed (Figma 23 2版 03).
+                Text(option.luggageCaption ?? option.way.verificationCaption)
+                    .font(Theme.jp(12, option.isUnavailable ? .medium : .regular))
+                    .foregroundStyle(option.isUnavailable ? Theme.ink : Theme.actionSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
@@ -69,8 +87,9 @@ struct SceneWayRow: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.ink)
+        .disabled(option.isUnavailable)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("この案の要約を表示")
+        .accessibilityHint(option.isUnavailable ? "この宿には預けられないため選べません" : "この案の要約を表示")
     }
 
     private var title: some View {
@@ -81,6 +100,7 @@ struct SceneWayRow: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .opacity(option.isUnavailable ? 0.4 : 1)
     }
 
     private var sit: some View {
@@ -89,6 +109,7 @@ struct SceneWayRow: View {
             Text("座って休める").font(Theme.jp(10, .medium)).foregroundStyle(Theme.actionSecondary)
         }
         .fixedSize(horizontal: !typeSize.isAccessibilitySize, vertical: true)
+        .opacity(option.isUnavailable ? 0.4 : 1)
     }
 
     private var slack: String {
@@ -101,16 +122,34 @@ struct SceneWaySummary: View {
     let option: SceneOption
     let input: SceneInput
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// Apple's place card open for a place of the way.
+    @State private var appleCard: AppleCardItem?
+
+    struct AppleCardItem: Identifiable {
+        let item: MKMapItem
+        var id: ObjectIdentifier { ObjectIdentifier(item) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("\(option.id)  \(option.way.reason.headline)").font(Theme.jp(17, .bold))
+            if let seat = option.way.seatPlace {
+                VStack(alignment: .leading, spacing: 8) {
+                    LookAroundPicture(place: seat, height: 160)
+                    if seat.placeID != nil { appleCardButton(seat) }
+                }
+            }
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) { metrics }
             } else {
                 HStack(alignment: .top, spacing: 8) { metrics }
             }
-            Text(option.way.verificationCaption).font(Theme.jp(13, .medium)).foregroundStyle(Theme.actionSecondary)
+            if case .checked(let fact) = option.luggage {
+                LuggageFactDetail(fact: fact)
+            } else {
+                Text(option.luggageCaption ?? option.way.verificationCaption)
+                    .font(Theme.jp(13, .medium)).foregroundStyle(Theme.actionSecondary)
+            }
             Text("座って休める時間は滞在の目安です。席の空き・営業時間は確認していません。")
                 .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
             Divider()
@@ -121,7 +160,7 @@ struct SceneWaySummary: View {
                         Text("徒歩 \(step.walkBeforeMinutes)分").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                     }
                     HStack(alignment: .top, spacing: 12) {
-                        Text(DaySchedule.clock(step.kind == .next ? input.nextStartMinutes : step.startMinutes))
+                        Text(DaySchedule.clock(step.kind == .next ? input.endMinutes : step.startMinutes))
                             .font(Theme.latin(13, .bold)).frame(minWidth: 48, alignment: .leading)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(step.kind.emoji) \(step.title)\(step.isUnknown ? " ？" : "")")
@@ -143,12 +182,35 @@ struct SceneWaySummary: View {
             }
         }
         .foregroundStyle(Theme.ink)
+        .sheet(item: $appleCard) { card in
+            AppleMapItemDetail(item: card.item) { appleCard = nil }
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// 「写真・営業時間を見る」: Apple's own place card, where the place's photos and hours are.
+    private func appleCardButton(_ place: ProposalPlace) -> some View {
+        Button {
+            Task {
+                if let item = await PlacePhotos.mapItem(of: place) { appleCard = AppleCardItem(item: item) }
+            }
+        } label: {
+            Label("\(place.name)の写真・営業時間（Appleマップ）", systemImage: "photo.on.rectangle")
+                .font(Theme.jp(12, .medium))
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 44)
+                .background(Theme.base, in: .capsule)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder private var metrics: some View {
         metric("徒歩", "\(option.way.walkMinutes)分")
         metric("座って休める", "約\(DurationText.text(minutes: option.way.sitMinutes))")
-        metric("余裕", option.way.fits ? "\(option.way.slackMinutes)分" : "\(option.way.shortfallMinutes)分足りない")
+        // Spare minutes only mean something when the way walks to a fixed plan at the end.
+        if option.way.endsAtPlan || !option.way.fits {
+            metric("余裕", option.way.fits ? "\(option.way.slackMinutes)分" : "\(option.way.shortfallMinutes)分足りない")
+        }
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
@@ -159,5 +221,42 @@ struct SceneWaySummary: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(Theme.base, in: .rect(cornerRadius: 12))
+    }
+}
+
+/// The check under a summary (Figma 23 2版 04): the line, the source tag that opens the page, the date it was
+/// checked, the conditions the source writes, and what was not checked.
+struct LuggageFactDetail: View {
+    let fact: LuggageFact
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(fact.caption).font(Theme.jp(13, .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let source = fact.sources.first, let url = URL(string: source.url) {
+                    Button { openURL(url) } label: {
+                        Text(source.official ? "公式" : "ほかの出典").font(Theme.jp(11, .medium))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .foregroundStyle(source.official ? Theme.surface : Theme.ink)
+                            .background(source.official ? Theme.ink : Theme.base, in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(source.official ? "公式の出典を開く" : "ほかの出典を開く")
+                }
+                Text(fact.checkedDateText()).font(Theme.jp(11)).foregroundStyle(Theme.actionSecondary)
+            }
+            if !fact.conditions.isEmpty {
+                Text(fact.conditions.joined(separator: " ・ ")).font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if fact.result == .official || fact.result == .introduced || fact.hasLocker {
+                Text("当日に受け付けてもらえるかは確かめていません").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
+            }
+            Text("AIが調べた情報です。変わっていることがあります。").font(Theme.jp(11)).foregroundStyle(Theme.actionSecondary)
+        }
+        .foregroundStyle(Theme.ink)
     }
 }

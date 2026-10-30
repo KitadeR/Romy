@@ -30,7 +30,7 @@ Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotyp
 - 取得対象記事：[観光地2,500件のWikidata ID・Wikipedia記事名の索引](docs/data-sources/sights-source-index.csv)。元ページへのリンクの作り方と索引の範囲は[出典記録](docs/data-sources.md#観光地データ)を参照してください。
 - 読みが見つからない場合と別名の読み：macOSの日本語処理を使った推定を含みます。実際の読みを保証するものではありません。
 
-Wikipediaの読みの個別の権利範囲・追加条件と、加工データの再配布表示の最終確認は残っています。複数の取得元を含むsights.json全体を、一括してCC0とは表示していません。
+複数の取得元を含むsights.json全体を、一括してCC0とは表示していません。Wikipedia由来の読みには、上記の出典・加工内容・利用条件を対応付けています。
 
 ## 市区町村データ
 
@@ -40,7 +40,7 @@ Wikipediaの読みの個別の権利範囲・追加条件と、加工データ�
 - [総務省の利用条件](https://www.soumu.go.jp/menu_kyotsuu/policy/tyosaku.html)
 - [公共データ利用規約1.0](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)
 
-元のExcelそのものではなく、Romy用に整形したデータです。元ファイルとの全行照合と取得日の復元は未実施です。
+元のExcelそのものではなく、Romy用に整形したデータです。取得・加工方法と対象データは[出典記録](docs/data-sources.md)に記載しています。
 
 ## 祝日データ
 
@@ -52,12 +52,11 @@ Wikipediaの読みの個別の権利範囲・追加条件と、加工データ�
 
 ## この表示の範囲
 
-取得元ごとの条件を区別して記載しています。この文書でRomyのソースコード全体のライセンスを新たに指定したものではありません。アプリ内の出典閲覧導線と、提出版へのこれらの表示の同梱は、最終版で確認します。
+取得元ごとの条件を区別して記載しています。この文書でRomyのソースコード全体のライセンスを新たに指定したものではありません。アプリ内の「出典・ライセンス」画面から、これらの表示と元記事一覧を閲覧できます。
 
-## アプリへの組み込み用ファイル（統合前）
+## アプリに同梱している出典表示
 
 - [出典表示・フォントの著作権表示・OFL原文全文](Romy/Resources/Acknowledgements/RomyAttributions.txt)
 - [元記事とWikidataへの直接URL付き索引](Romy/Resources/Acknowledgements/RomySourceArticles.csv)
-- [組み込み・同梱・画面表示の確認手順](docs/attribution-integration.md)
 
-これらは文書ブランチ上に準備したファイルです。提出するアプリへ統合し、閲覧できる状態にする作業と最終確認はこれからです。
+本文と一覧はアプリへ同梱しています。アプリ内ではオフラインで閲覧でき、元サイトのリンクを開くときに通信します。

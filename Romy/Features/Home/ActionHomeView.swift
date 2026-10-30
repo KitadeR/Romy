@@ -11,9 +11,10 @@ struct ActionHomeCover: View {
 
     private let text = DateText(calendar: .current, holidays: .bundled)
     private static let sky = [Color(hex: 0x7DB2E6), Color(hex: 0xC9B3C9), Color(hex: 0xEFB48E)]
+    private var photo: UIImage? { trip.photo.flatMap(UIImage.init(data:)) }
 
     private var day: Int? {
-        trip.dates.dayNumber(on: .now, calendar: text.calendar)
+        trip.dates.dayNumber(on: RomyClock.now, calendar: text.calendar)
     }
 
     /// The ward is asked again only after moving about 500 m, not on every location update.
@@ -36,8 +37,20 @@ struct ActionHomeCover: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            LinearGradient(colors: Self.sky, startPoint: .top, endPoint: .bottom)
+            Color.clear
                 .frame(height: 420)
+                .overlay {
+                    if let photo {
+                        Image(uiImage: photo).resizable().scaledToFill()
+                            .overlay(LinearGradient(
+                                colors: [.black.opacity(0.2), .clear, .black.opacity(0.15)],
+                                startPoint: .top, endPoint: .bottom
+                            ))
+                    } else {
+                        LinearGradient(colors: Self.sky, startPoint: .top, endPoint: .bottom)
+                    }
+                }
+                .clipped()
                 .frame(maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea(edges: .top)
             VStack(alignment: .leading, spacing: 4) {
@@ -88,10 +101,10 @@ struct ActionHomeSheet: View {
     private let text = DateText(calendar: .current, holidays: .bundled)
 
     private var today: ActionToday? {
-        guard let day = trip.dates.dayNumber(on: .now, calendar: text.calendar) else { return nil }
+        guard let day = trip.dates.dayNumber(on: RomyClock.now, calendar: text.calendar) else { return nil }
         let plans = trip.items(on: day)
         let schedule = trip.schedule(
-            of: plans, on: .now, calendar: text.calendar, travelMinutes: { travel.minutes(from: $0, to: $1) }
+            of: plans, on: RomyClock.now, calendar: text.calendar, travelMinutes: { travel.minutes(from: $0, to: $1) }
         )
         return ActionToday(plans: plans, day: day, schedule: schedule, stay: trip.stayTonight(on: day))
     }
@@ -138,7 +151,7 @@ struct ActionHomeSheet: View {
             .presentationDetents([.large])
         }
         .sheet(item: $proposing, onDismiss: showApplied) { request in
-            ActionSceneSheet(request: request) { change in
+            ActionSceneSheet(request: request, facts: .live(trip: trip)) { change in
                 let problem = onApplyScene(change)
                 if problem == nil {
                     applied = true

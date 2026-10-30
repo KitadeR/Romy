@@ -170,8 +170,8 @@ struct AppShell: View {
     /// The day of the trip that today is, when the trip is in Action; the Action Home is shown then
     /// (Notion 02 §6-4, 2026-10-27). The day before the trip keeps Plan Home: its Action form was about the Shinkansen.
     private var actionDay: Int? {
-        guard TripPhase(dates: trip.dates, today: .now) == .action else { return nil }
-        return trip.dates.dayNumber(on: .now)
+        guard TripPhase(dates: trip.dates, today: RomyClock.now) == .action else { return nil }
+        return trip.dates.dayNumber(on: RomyClock.now)
     }
 
     /// Opening a plan from the Action Home goes to today's tab of the itinerary with the plan's detail open.
@@ -310,7 +310,7 @@ extension AppShell {
         var wishActions = actions
         wishActions.search = { sheet = .wish }
         wishActions.removeWish = removeWish
-        let isAction = TripPhase(dates: trip.dates, today: .now) == .action
+        let isAction = TripPhase(dates: trip.dates, today: RomyClock.now) == .action
         return WishlistSheet(trip: trip, isAction: isAction, location: location.location, actions: wishActions)
     }
 
@@ -381,3 +381,14 @@ enum ShellNoteKind {
     /// A confirmed way: the plans it added, and where the others were (段階6, Figma 27).
     case sceneApplied(added: [ItineraryItem], before: [PlanPosition])
 }
+
+#if DEBUG
+extension AppShell {
+    init(trip: Trip, initialTab: Tab, initialTravel: TravelTimes = TravelTimes()) {
+        self.trip = trip
+        _tab = State(initialValue: initialTab)
+        _itineraryTab = State(initialValue: initialTab == .itinerary ? .day(1) : .all)
+        _travel = State(initialValue: initialTravel)
+    }
+}
+#endif

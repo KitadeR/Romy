@@ -13,6 +13,9 @@ build/
 ## macOS
 .DS_Store
 
+# Local capture exports (submission images are in docs/screenshots)
+output/
+
 ## Editor / tooling
 buildServer.json
 
@@ -75,3 +78,6 @@ fastlane/test_output
 # Cache of the sights build (Tools/sights/build_sights.py)
 Tools/sights/.cache/
 __pycache__/
+
+## Romy relay (address and the app passphrase; see server/relay/Relay.plist.example)
+Romy/Config/Relay.plist

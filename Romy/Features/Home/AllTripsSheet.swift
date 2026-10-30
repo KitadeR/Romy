@@ -57,7 +57,10 @@ struct AllTripsSheet: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
-            .padding(.bottom, 8)
+
+            AttributionButton()
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
         }
         .background(Theme.base.ignoresSafeArea())
         .alert("旅行名を変える", isPresented: isRenaming) {

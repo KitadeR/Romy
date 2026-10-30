@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Copy to Romy/Config/Relay.plist (ignored by Git) with the published relay's address and the app's
+     passphrase (the APP_TOKEN secret on Cloudflare). Without it an iPhone does not check stays. -->
+<plist version="1.0">
+<dict>
+	<key>URL</key>
+	<string>https://romy-relay.example.workers.dev</string>
+	<key>Token</key>
+	<string></string>
+</dict>
+</plist>

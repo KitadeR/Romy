@@ -7,6 +7,7 @@ struct StateTilesSheet: View {
     /// The tiles chosen from the Home card's chips.
     let initial: Set<ActionState>
     var initialStrength: TiredStrength = .quite
+    var initiallyAskingStrength = false
     /// 「この内容で探す」 with the states and, when tired, how tired.
     let onSearch: (Set<ActionState>, TiredStrength?) -> Void
 
@@ -28,7 +29,11 @@ struct StateTilesSheet: View {
         .padding(.top, 24)
         .padding(.bottom, 8)
         .background(Theme.surface.ignoresSafeArea())
-        .onAppear { states = initial; strength = initialStrength }
+        .onAppear {
+            states = initial
+            strength = initialStrength
+            isAskingStrength = initiallyAskingStrength
+        }
         .animation(.snappy, value: isAskingStrength)
     }
 

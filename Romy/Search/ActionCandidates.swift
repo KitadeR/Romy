@@ -36,7 +36,8 @@ enum MapKitActionSearch {
         return ProposalPlace(
             name: name, address: item.address?.fullAddress,
             category: item.pointOfInterestCategory.map { $0.rawValue } ?? "none",
-            latitude: coordinate.latitude, longitude: coordinate.longitude
+            latitude: coordinate.latitude, longitude: coordinate.longitude,
+            placeID: item.identifier?.rawValue
         )
     }
 

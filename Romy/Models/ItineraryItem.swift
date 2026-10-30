@@ -51,6 +51,8 @@ final class ItineraryItem {
     var travelModeRaw: String?
     /// Photo the person chose for the plan (shown on its card and at the top of its detail); nil until chosen.
     @Attribute(.externalStorage) var photo: Data?
+    /// A stay's luggage check (`LuggageFact` as JSON, Notion 02 §6-4 事実の確認⑤); nil until checked.
+    var luggageFactData: Data?
     var trip: Trip?
 
     init(
@@ -210,9 +212,15 @@ struct ItineraryItemSnapshot {
     var checkOutMinutes: Int?
     var lastCheckInMinutes: Int?
     var stayKindRaw: String?
+    var luggageFactData: Data?
 }
 
 extension ItineraryItem {
+    var luggageFact: LuggageFact? {
+        get { luggageFactData.flatMap { try? JSONDecoder().decode(LuggageFact.self, from: $0) } }
+        set { luggageFactData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     func snapshot() -> ItineraryItemSnapshot {
         ItineraryItemSnapshot(
             id: id, title: title, day: day, order: order, kindRaw: kindRaw, category: category, area: area,
@@ -221,7 +229,7 @@ extension ItineraryItem {
             notBeforeMinutes: notBeforeMinutes, doneAt: doneAt,
             travelModeRaw: travelModeRaw, photo: photo, bookingNeeded: bookingNeeded, bookedAt: bookedAt,
             nightsCount: nightsCount, checkOutMinutes: checkOutMinutes, lastCheckInMinutes: lastCheckInMinutes,
-            stayKindRaw: stayKindRaw
+            stayKindRaw: stayKindRaw, luggageFactData: luggageFactData
         )
     }
 
@@ -247,6 +255,7 @@ extension ItineraryItem {
         item.checkOutMinutes = snapshot.checkOutMinutes
         item.lastCheckInMinutes = snapshot.lastCheckInMinutes
         item.stayKindRaw = snapshot.stayKindRaw
+        item.luggageFactData = snapshot.luggageFactData
         return item
     }
 }

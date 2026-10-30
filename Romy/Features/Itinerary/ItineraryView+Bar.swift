@@ -22,32 +22,10 @@ enum SheetHeights {
     static func isLow(_ detent: PresentationDetent) -> Bool { detent == low || detent == small }
 }
 
-/// The screen's size and its bottom safe area, measured behind the sheet.
-nonisolated struct ScreenMetrics: Equatable, Sendable {
-    var width: CGFloat = 0
-    var height: CGFloat = 0
-    var bottomInset: CGFloat = 0
-
-    init() {}
-
-    init(_ geometry: GeometryProxy) {
-        width = geometry.size.width
-        height = geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
-        bottomInset = geometry.safeAreaInsets.bottom
-    }
-}
-
 /// The height an other tab's sheet was left at, with the tab it belongs to.
 struct OtherDetent {
     var key: String?
     var value: PresentationDetent = .large
-}
-
-/// How the menu bar is drawn so it looks the same at every sheet height.
-struct BarFit {
-    var scale: CGFloat = 1
-    var shiftX: CGFloat = 0
-    var shiftY: CGFloat = 2
 }
 
 extension ItineraryView {
@@ -70,7 +48,6 @@ extension ItineraryView {
             .ignoresSafeArea()
             .opacity(isActive ? 1 : 0)
             .allowsHitTesting(isActive)
-            .onGeometryChange(for: ScreenMetrics.self) { ScreenMetrics($0) } action: { screen = $0 }
         }
     }
 
@@ -123,18 +100,5 @@ extension ItineraryView {
         .frame(height: 170)
         .ignoresSafeArea(edges: .bottom)
         .allowsHitTesting(false)
-    }
-
-    /// Scale and offset that put the menu bar at the same size and place on the screen at every sheet height:
-    /// it stands 2pt above the full-height sheet's bottom, however the sheet is drawn.
-    var barFit: BarFit {
-        guard screen.height > 0, sheetLayout.width > 0, sheetFrame.width > 0 else { return BarFit() }
-        let drawn = sheetFrame.width / sheetLayout.width
-        let target = screen.height - screen.bottomInset - 2
-        return BarFit(
-            scale: 1 / drawn,
-            shiftX: (screen.width / 2 - sheetFrame.midX) / drawn,
-            shiftY: (target - sheetFrame.minY) / drawn - sheetLayout.height + 4
-        )
     }
 }
