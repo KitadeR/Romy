@@ -1,11 +1,6 @@
 import Foundation
 
-// The first scene of the question feature (Notion 02 §6-4, decided 2026-10-25): the person is tired, maybe with
-// heavy luggage, before a stay that opens later (「15:00から」) and a fixed plan after it (17:00 予約).
-// Behind 「Romyが案を作る」 (FigJam 229:1280): ①the time comes from the itinerary, ②places from the map,
-// ③they are put into ways (at most two added places), ④the time is counted in code, ⑥the ways are put in order.
-// ⑤checking facts (can the stay keep luggage before check-in) needs the AI and is not here: until it is, such a
-// fact is 「？」 and the way is counted as if the luggage stays with the person.
+// 旅程から次の固定時刻を求め、実際の徒歩経路と本人の状態から過ごし方を組み立てる。
 
 /// What the scene is built from: now, the plans ahead in the itinerary, and the person's state.
 struct SceneInput {
@@ -146,10 +141,7 @@ enum ActionScene {
         _ input: SceneInput, search: @escaping CandidateSearch, walking: WalkingTime,
         luggageCheck: LuggageCheck = { _ in .unknown }
     ) async -> [SceneWay] {
-        let available = input.endMinutes - input.nowMinutes
-        let usual = WalkLimit.oneWayMinutes(availableMinutes: available, walkLess: false)
-        let oneWay = input.strength?.oneWayCapMinutes.map { min($0, usual) } ?? usual
-        let radius = WalkLimit.meters(minutes: oneWay)
+        let radius = searchRadius(for: input)
         let seat = input.states.contains(.hungry) ? mealChip : seatChip
         let seatKind: SceneStep.Kind = seat == mealChip ? .eat : .rest
         let nearHereOnly = input.strength?.restsNearHereOnly ?? false
@@ -186,19 +178,28 @@ enum ActionScene {
         var ways: [SceneWay] = []
         for (reason, steps) in plans {
             let all = steps + (input.next.map { [Planned(.next, $0.title, $0.place)] } ?? [])
-            guard let way = await timed(reason, all, input: input, walking: walking), way.addedPlaces <= maxAdded
-            else { continue }
-            // The radius only selects candidates. A river or station may make the actual walk much longer.
-            if let cap = input.strength?.oneWayCapMinutes,
-               way.steps.contains(where: { step in
-                   [.rest, .eat, .dropLuggage, .lockerDrop].contains(step.kind) && step.walkBeforeMinutes > cap
-               }) {
-                continue
-            }
+            guard let way = await timed(reason, all, input: input, walking: walking),
+                  meetsWalkingLimits(way, strength: input.strength) else { continue }
             ways.append(way)
         }
         nameLeastWalkingRest(&ways)
         return Array(order(ways, heavyLuggage: input.hasHeavyLuggage).prefix(waysShown))
+    }
+
+    static func searchRadius(for input: SceneInput) -> Double {
+        let available = input.endMinutes - input.nowMinutes
+        let usual = WalkLimit.oneWayMinutes(availableMinutes: available, walkLess: false)
+        let oneWay = input.strength?.oneWayCapMinutes.map { min($0, usual) } ?? usual
+        return WalkLimit.meters(minutes: oneWay)
+    }
+
+    /// 川や線路を迂回すると、検索半径の内側でも一度に歩ける時間を超えることがある。
+    static func meetsWalkingLimits(_ way: SceneWay, strength: TiredStrength?) -> Bool {
+        guard way.addedPlaces <= (strength?.maxAddedPlaces ?? 2) else { return false }
+        guard let cap = strength?.oneWayCapMinutes else { return true }
+        return !way.steps.contains {
+            [.rest, .eat, .dropLuggage, .lockerDrop].contains($0.kind) && $0.walkBeforeMinutes > cap
+        }
     }
 
     private static func openStayWays(
@@ -223,8 +224,6 @@ enum ActionScene {
             for index in restWays { ways[index].reason = index == least ? .leastWalk : .otherSeat }
         }
     }
-
-    // MARK: - ③ Putting places into a way
 
     struct Context {
         let input: SceneInput

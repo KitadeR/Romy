@@ -99,6 +99,58 @@ final class ActionSceneModel {
         }
     }
 
+    /// 旅程は確定まで触らず、編集中の案にだけ差し替え結果を持たせる。
+    func replacements(for option: SceneOption, at index: Int) async -> SceneAlternatives {
+        guard let input, option.way.steps.indices.contains(index) else { return SceneAlternatives() }
+        let step = option.way.steps[index]
+        guard step.kind == .rest || step.kind == .eat else { return SceneAlternatives() }
+        let basis = generation
+        let origin = index == 0 ? input.origin : option.way.steps[index - 1].place
+        let run = SceneSearchRun(search: search, routes: routes)
+        routes.retryUnavailable()
+        let found = await ActionCandidates.gather(
+            for: step.kind == .eat ? ActionScene.mealChip : ActionScene.seatChip,
+            near: origin, radiusMeters: ActionScene.searchRadius(for: input), search: run.find
+        )
+        var result = SceneAlternatives()
+        var seen = Set(option.way.steps.map { $0.place.scenePlaceKey })
+        for place in found.places where seen.insert(place.scenePlaceKey).inserted {
+            guard !Task.isCancelled, generation == basis else { return SceneAlternatives() }
+            var stops = option.way.steps.map { ActionScene.Planned($0.kind, $0.title, $0.place, unknown: $0.isUnknown) }
+            stops[index] = ActionScene.Planned(step.kind, place.name, place)
+            let reason = option.way.reason == .leastWalk ? SceneWay.Reason.otherSeat : option.way.reason
+            guard let way = await ActionScene.timed(reason, stops, input: input, walking: run.walk),
+                  ActionScene.meetsWalkingLimits(way, strength: input.strength) else { continue }
+            result.choices.append(SceneReplacement(optionID: option.id, generation: basis, index: index,
+                                                  original: step.place, place: place, way: way))
+            if result.choices.count == ActionScene.waysShown { break }
+        }
+        result.incomplete = found.failed || run.routeFailed
+        return result
+    }
+
+    @discardableResult
+    func replace(_ choice: SceneReplacement) -> Bool {
+        guard generation == choice.generation, choice.way.fits,
+              let index = ways.firstIndex(where: { $0.id == choice.optionID }),
+              !ways[index].isUnavailable, ways[index].way.steps[choice.index].place == choice.original
+        else { return false }
+        var way = choice.way
+        // 候補を調べている間に届いた宿の確認結果も、新しい案へ引き継ぐ。
+        if case .checked(let fact) = ways[index].luggage,
+           fact.result == .official || fact.result == .introduced {
+            way = way.knowingLuggageIsKept()
+        }
+        ways[index].way = way
+        if way.reason == .otherSeat {
+            for other in ways.indices where ways[other].way.reason == .leastWalk
+                && ways[other].way.walkMinutes > way.walkMinutes {
+                ways[other].way.reason = .otherSeat
+            }
+        }
+        return true
+    }
+
     /// The stay's check when it is kept and fresh; otherwise the stay to ask about now, when the person allowed it
     /// (Notion 02 §6-4「決定（2026-10-29）｜事実の確認⑤」).
     private func luggage(for scene: SceneInput) -> (known: LuggageFact?, asking: ItineraryItemSnapshot?) {
@@ -154,6 +206,25 @@ private final class SceneSearchRun {
         }
         return value
     }
+}
+
+extension ProposalPlace {
+    var scenePlaceKey: String { placeID ?? "\(latitude),\(longitude):\(name)" }
+}
+
+struct SceneReplacement: Identifiable {
+    let optionID: String
+    let generation: Int
+    let index: Int
+    let original: ProposalPlace
+    let place: ProposalPlace
+    let way: SceneWay
+    var id: String { place.scenePlaceKey }
+}
+
+struct SceneAlternatives {
+    var choices: [SceneReplacement] = []
+    var incomplete = false
 }
 
 struct SceneOption: Identifiable {

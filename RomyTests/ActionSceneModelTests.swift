@@ -60,4 +60,54 @@ struct ActionSceneModelTests {
         await model.refresh(origin: origin, nowMinutes: 850, usesPlanPlace: true)
         #expect(model.selected == nil)
     }
+
+    @Test func replacingOneStopRetimesBothLegsAndKeepsOtherOptions() async throws {
+        let cafe = ProposalPlace(name: "駅前カフェ", latitude: 35.0003, longitude: 135)
+        let bakery = ProposalPlace(name: "広場のカフェ", latitude: 35.0008, longitude: 135)
+        let routes = SceneRoutes { from, destination in
+            let minutes = from == bakery || destination == bakery ? 7 : 3
+            return SceneRoute(minutes: minutes, polyline: MKPolyline())
+        }
+        let model = ActionSceneModel(request: request(), routes: routes, search: { _ in [cafe, bakery, bakery] })
+        await model.refresh(origin: origin, nowMinutes: 840, usesPlanPlace: true)
+        let first = try #require(model.ways.first)
+        let other = try #require(model.ways.last)
+        let result = await model.replacements(for: first, at: 0)
+        let choice = try #require(result.choices.first)
+        #expect(result.choices.count == 1)
+        #expect(choice.way.walkMinutes - first.way.walkMinutes == 8)
+        #expect(choice.way.sitMinutes - first.way.sitMinutes == -8)
+        #expect(model.ways.first?.way == first.way)
+
+        #expect(model.replace(choice))
+        #expect(!model.replace(choice))
+        #expect(model.ways.first?.way.steps.first?.place == bakery)
+        #expect(model.ways.first?.way.steps.last?.place == first.way.steps.last?.place)
+        #expect(model.ways.last?.way == other.way)
+        #expect(model.request.plans.count == 2)
+        #expect(model.request.plans.last?.fixedStartMinutes == 1020)
+
+        await model.refresh(origin: origin, nowMinutes: 841, usesPlanPlace: true)
+        #expect(!model.replace(choice))
+    }
+
+    @Test func missingAndLateReplacementRoutesLeaveTheOriginalIntact() async throws {
+        let original = ProposalPlace(name: "駅前", latitude: 35.0004, longitude: 135)
+        let late = ProposalPlace(name: "川向こう", latitude: 35.0007, longitude: 135)
+        let missing = ProposalPlace(name: "路地裏", latitude: 35.0008, longitude: 135)
+        let routes = SceneRoutes { from, destination in
+            if destination == missing { throw URLError(.notConnectedToInternet) }
+            return SceneRoute(minutes: from == late || destination == late ? 95 : 2, polyline: MKPolyline())
+        }
+        let model = ActionSceneModel(request: request(), routes: routes, search: { _ in [original, late, missing] })
+        await model.refresh(origin: origin, nowMinutes: 840, usesPlanPlace: true)
+        let option = try #require(model.ways.first)
+        let result = await model.replacements(for: option, at: 0)
+        let choice = try #require(result.choices.first)
+        #expect(result.incomplete)
+        #expect(choice.place == late)
+        #expect(choice.way.shortfallMinutes > 0)
+        #expect(!model.replace(choice))
+        #expect(model.ways.first?.way == option.way)
+    }
 }
