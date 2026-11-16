@@ -45,7 +45,8 @@ struct ScenePreview: View {
                     .background(option.way.fits ? Theme.ink : Theme.actionSecondary, in: .capsule)
             }
             .buttonStyle(.plain)
-            .disabled(!option.way.fits)
+            .disabled(!option.way.fits || option.isUnavailable)
+            if option.isUnavailable { Text(option.luggageCaption ?? "この案は利用できません") }
             Text("入れたあと、下の通知の「元に戻す」で元の旅程に戻せます。")
                 .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
         }

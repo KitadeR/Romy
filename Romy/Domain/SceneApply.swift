@@ -14,10 +14,11 @@ struct SceneApply {
     }
 
     enum Problem: Error, Equatable {
-        case changed, tooLate, doesNotFit
+        case changed, tooLate, doesNotFit, saveFailed
 
         var message: String {
             switch self {
+            case .saveFailed: "旅程を保存できませんでした。もう一度お試しください。"
             case .changed: "探したあとに旅程が変わりました。もう一度探してください。"
             case .tooLate: "探してから時間がたったので、もう一度探してください。"
             case .doesNotFit: "この案は次の予定に間に合わないので、旅程に入れられません。"

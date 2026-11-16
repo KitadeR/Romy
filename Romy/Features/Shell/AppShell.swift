@@ -342,8 +342,7 @@ extension AppShell {
         }
     }
 
-    /// 「この内容で旅程に入れる」 (Notion 02 §6-4 決定 2026-10-27, Figma 27): the way goes into today, only when today's
-    /// plans are still the ones searched from. The itinerary opens after the proposal has closed.
+    /// 検索時の旅程と照合し、保存が成功してから旅程へ移る。
     fileprivate func applyScene(_ change: SceneApply) -> SceneApply.Problem? {
         guard change.matches(trip.items(on: change.day).map { $0.snapshot() }) else { return .changed }
         let (added, before) = trip.apply(change)
@@ -351,13 +350,20 @@ extension AppShell {
             modelContext.insert(item)
             item.trip = trip
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            // ほかの未保存編集を巻き戻さず、この操作で加えた予定と並びだけを戻す。
+            trip.restore(before)
+            for item in added { modelContext.delete(item) }
+            return .saveFailed
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         itineraryTab = .day(change.day)
         appliedNote = ShellNote(message: change.message, kind: .sceneApplied(added: added, before: before))
         return nil
     }
 
-    /// The new plans are outlined and the note offers 「元に戻す」 for about 5 seconds, as after ＋ (Figma 27).
     fileprivate func showAppliedScene() {
         guard let applied = appliedNote, case let .sceneApplied(added, _) = applied.kind else { return }
         appliedNote = nil
