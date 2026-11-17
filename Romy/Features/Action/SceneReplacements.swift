@@ -58,9 +58,14 @@ struct SceneReplacementSheet: View {
             .safeAreaInset(edge: .bottom) {
                 let choice = results?.choices.first { $0.id == selected }
                 Button("この店に変更") {
-                    if let choice, model.replace(choice) { dismiss() } else { expired = true }
+                    if let choice, model.replace(choice) {
+                        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                        dismiss()
+                    } else {
+                        expired = true
+                    }
                 }
-                .buttonStyle(.borderedProminent).buttonSizing(.flexible).controlSize(.large)
+                .buttonStyle(.glassProminent).buttonSizing(.flexible).controlSize(.large)
                 .tint(Theme.ink).disabled(choice == nil || expired || option.isUnavailable).padding()
             }
             .sensoryFeedback(.selection, trigger: selected) { _, new in new != nil }

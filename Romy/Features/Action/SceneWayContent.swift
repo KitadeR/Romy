@@ -143,8 +143,11 @@ struct SceneWaySummary: View {
                             Text("\(step.kind.emoji) \(step.title)\(step.isUnknown ? " ？" : "")")
                                 .font(Theme.jp(15, .medium))
                             if step.kind == .rest || step.kind == .eat {
-                                Button(step.kind == .eat ? "別の食事先を探す" : "別のカフェを探す") { onReplace(index) }
-                                    .font(Theme.jp(14, .medium)).buttonStyle(.bordered)
+                                Button(step.kind == .eat ? "別の食事先を探す" : "別のカフェを探す") {
+                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                                    onReplace(index)
+                                }
+                                    .font(Theme.jp(14, .medium)).buttonStyle(.glass).tint(Theme.ink)
                                     .disabled(option.isUnavailable)
                             }
                             if step.kind == .next {
@@ -173,6 +176,7 @@ struct SceneWaySummary: View {
     /// 「写真・営業時間を見る」: Apple's own place card, where the place's photos and hours are.
     private func appleCardButton(_ place: ProposalPlace) -> some View {
         Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             Task {
                 if let item = await PlacePhotos.mapItem(of: place) { appleCard = AppleCardItem(item: item) }
             }
@@ -180,10 +184,11 @@ struct SceneWaySummary: View {
             Label("\(place.name)の写真・営業時間（Appleマップ）", systemImage: "photo.on.rectangle")
                 .font(Theme.jp(12, .medium))
                 .multilineTextAlignment(.leading)
-                .padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 44)
-                .background(Theme.base, in: .capsule)
+
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .controlSize(.regular)
+        .frame(minHeight: 44)
     }
 
     @ViewBuilder private var metrics: some View {

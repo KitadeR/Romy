@@ -55,10 +55,11 @@ struct StateTilesSheet: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .frame(minWidth: 44, minHeight: 44)
                 .accessibilityLabel("状態を選び直す")
             }
             Text(isAskingStrength ? "どれくらい疲れた？" : "いまどうする？").font(Theme.jp(24, .bold))
@@ -70,10 +71,11 @@ struct StateTilesSheet: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
+            .controlSize(.regular)
+            .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("閉じる")
         }
         .foregroundStyle(Theme.ink)
@@ -159,9 +161,10 @@ struct StateTilesSheet: View {
         } label: {
             Text(asksStrength ? "次へ" : "この内容で探す")
                 .font(Theme.jp(17, .bold))
-                .frame(maxWidth: .infinity, minHeight: 52)
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glassProminent)
+        .controlSize(.large)
         .buttonBorderShape(.capsule)
         .tint(Theme.ink)
         .disabled(states.isEmpty)

@@ -7,7 +7,6 @@ struct ActionSceneSheet: View {
     @Environment(LocationProvider.self) private var location
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @Namespace private var cardTransition
     @State private var editStates = false
     @State private var fromPlan = false
     @State private var revision = 0
@@ -38,11 +37,10 @@ struct ActionSceneSheet: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
+            ZStack {
+                Theme.surface.ignoresSafeArea()
                 if let input = model.input, !model.ways.isEmpty {
-                    SceneComparison(
-                        model: model, input: input, position: $position, cardTransition: cardTransition
-                    ) { id in
+                    SceneComparison(model: model, input: input, position: $position) { id in
                         path.append(.detail(id))
                     } header: {
                         controls
@@ -64,6 +62,8 @@ struct ActionSceneSheet: View {
             .toolbarVisibility(.hidden, for: .navigationBar)
             .navigationDestination(for: Page.self) { page in destination(page) }
         }
+        .background(Theme.surface)
+        .presentationBackground(Theme.surface)
         .task { location.start() }
         .task(id: refreshKey) { await refresh() }
         .sheet(isPresented: $editStates) {
@@ -94,9 +94,13 @@ struct ActionSceneSheet: View {
                 }
                 .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 20))
                 .accessibilityHint("条件を編集")
-                Button("閉じる", systemImage: "xmark") { dismiss() }
-                    .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
-                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
+                Button("閉じる", systemImage: "xmark") {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    dismiss()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.regular)
+                .frame(minWidth: 44, minHeight: 44)
             }
         }
     }
@@ -135,25 +139,7 @@ struct ActionSceneSheet: View {
         switch page {
         case let .detail(id):
             if let option = model.ways.first(where: { $0.id == id }), let input = model.input {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        SceneWaySummary(option: option, input: input, footnote: model.footnote) {
-                            replacing = StopSelection(id: $0)
-                        }
-                        Button("この案で旅程を確認") {
-                            problem = nil
-                            path.append(.preview(id))
-                        }
-                        .buttonStyle(.borderedProminent).buttonSizing(.flexible)
-                        .controlSize(.large).tint(Theme.ink).disabled(option.isUnavailable)
-                    }.padding(20)
-                }
-                .navigationTransition(.zoom(sourceID: id, in: cardTransition))
-                .navigationTitle("案の詳細").navigationBarTitleDisplayMode(.inline)
-                .sheet(item: $replacing) { stop in
-                    SceneReplacementSheet(model: model, option: option, index: stop.id)
-                }
-                .background(Theme.surface)
+                detail(option, input: input)
             }
         case let .preview(id):
             if let option = model.ways.first(where: { $0.id == id }), let input = model.input {
@@ -167,6 +153,7 @@ struct ActionSceneSheet: View {
                         }
                     }
                 }
+                .toolbarVisibility(.visible, for: .navigationBar)
                 .navigationTitle("旅程を確認").navigationBarTitleDisplayMode(.inline)
                 .background(Theme.surface)
             }
@@ -307,6 +294,29 @@ private struct ChosenLengthSlider: View {
 
 // 画面の位置と、差し替え対象の立ち寄り先を区別して持つ。
 private extension ActionSceneSheet {
+    func detail(_ option: SceneOption, input: SceneInput) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SceneWaySummary(option: option, input: input, footnote: model.footnote) {
+                    replacing = StopSelection(id: $0)
+                }
+                Button("この案で旅程を確認") {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    problem = nil
+                    path.append(.preview(option.id))
+                }
+                .buttonStyle(.glassProminent).buttonSizing(.flexible)
+                .controlSize(.large).tint(Theme.ink).disabled(option.isUnavailable)
+            }.padding(20)
+        }
+        .toolbarVisibility(.visible, for: .navigationBar)
+        .navigationTitle("案の詳細").navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $replacing) { stop in
+            SceneReplacementSheet(model: model, option: option, index: stop.id)
+        }
+        .background(Theme.surface)
+    }
+
     var refreshKey: String {
         "\(fromPlan || location.location != nil)-\(fromPlan)-\(revision)"
     }

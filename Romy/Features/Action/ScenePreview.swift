@@ -40,11 +40,11 @@ struct ScenePreview: View {
             }
             Button(action: onApply) {
                 Text("この内容で旅程に入れる").font(Theme.jp(16, .bold))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(Theme.surface)
-                    .background(option.way.fits ? Theme.ink : Theme.actionSecondary, in: .capsule)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .tint(Theme.ink)
             .disabled(!option.way.fits || option.isUnavailable)
             if option.isUnavailable { Text(option.luggageCaption ?? "この案は利用できません") }
             Text("入れたあと、下の通知の「元に戻す」で元の旅程に戻せます。")
