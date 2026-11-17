@@ -11,6 +11,7 @@ struct StateTilesSheet: View {
     let onSearch: (Set<ActionState>, TiredStrength?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var states: Set<ActionState> = []
     @State private var strength: TiredStrength = .quite
     @State private var isAskingStrength = false
@@ -29,26 +30,38 @@ struct StateTilesSheet: View {
         .padding(.bottom, 8)
         .background(Theme.surface.ignoresSafeArea())
         .onAppear { states = initial; strength = initialStrength }
-        .animation(.snappy, value: isAskingStrength)
+        .animation(reduceMotion ? nil : .snappy, value: isAskingStrength)
     }
 
     private var header: some View {
         HStack {
             if isAskingStrength {
-                Button { isAskingStrength = false } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold))
+                Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    isAskingStrength = false
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
                 .accessibilityLabel("状態を選び直す")
             }
             Text(isAskingStrength ? "どれくらい疲れた？" : "いまどうする？").font(Theme.jp(24, .bold))
             Spacer()
-            Button("閉じる") { dismiss() }
-                .font(Theme.jp(14, .bold))
-                .padding(.horizontal, 16)
-                .frame(height: 36)
-                .background(Capsule().fill(Theme.fill))
-                .buttonStyle(.plain)
+            Button {
+                // シートを閉じる前に返す。破棄されるViewの状態変化には依存させない。
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("閉じる")
         }
         .foregroundStyle(Theme.ink)
     }
@@ -112,7 +125,7 @@ struct StateTilesSheet: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(Theme.fill))
         }
         .sensoryFeedback(trigger: strength) { old, new in
-            guard new > old else { return nil }
+            if new < old { return .selection }
             let weight: SensoryFeedback.Weight = [.light, .medium, .heavy][new.impact.weight]
             return .impact(weight: weight, intensity: new.impact.intensity)
         }
@@ -124,6 +137,7 @@ struct StateTilesSheet: View {
     private var mainButton: some View {
         let asksStrength = !isAskingStrength && states.contains(.tired)
         return Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             if asksStrength {
                 isAskingStrength = true
             } else {
@@ -132,11 +146,11 @@ struct StateTilesSheet: View {
         } label: {
             Text(asksStrength ? "次へ" : "この内容で探す")
                 .font(Theme.jp(17, .bold))
-                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Capsule().fill(states.isEmpty ? Theme.faint : Theme.ink))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .tint(Theme.ink)
         .disabled(states.isEmpty)
     }
 }
