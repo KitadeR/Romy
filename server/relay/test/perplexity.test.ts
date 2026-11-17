@@ -32,3 +32,19 @@ describe("perplexity", () => {
     expect(jsonIn("なし")).toBeNull();
   });
 });
+
+describe("一言解釈の送信範囲", () => {
+  it("検索ツールを渡さず、上限を守る呼び出しは暗黙に再試行しない", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const send = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response("bad schema", { status: 400 });
+    }) as typeof fetch;
+    await expect(perplexity("test-key", send, { intake: true, retrySchema: false })("指示", "30分休む", {}))
+      .rejects.toThrow("perplexity 400");
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].tools).toEqual([]);
+    expect(bodies[0].model).toBe("openai/gpt-6-luna");
+    expect(bodies[0].input).toBe("30分休む");
+  });
+});

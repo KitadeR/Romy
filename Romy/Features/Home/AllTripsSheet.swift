@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 「すべての旅行」 from the trip name ▾ (Notion 02 §6-3): switch trips, make a new one, and with a swipe to the
 /// side rename (編集) or delete (削除) a trip. A trip's name can be changed after it is made (Notion 02 §1, 2026-10-07).
-/// Duplicating a trip comes later (Notion 05).
+/// 複製 makes a full copy of a trip (`Trip.duplicate`).
 struct AllTripsSheet: View {
     let current: Trip
     /// Called before the sheet closes; the caller opens trip creation after it has closed.
@@ -36,6 +36,8 @@ struct AllTripsSheet: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button { startRenaming(trip) } label: { Label("編集", systemImage: "pencil") }
                                 .tint(Theme.ink)
+                            Button { duplicate(trip) } label: { Label("複製", systemImage: "plus.square.on.square") }
+                                .tint(.blue)
                             Button(role: .destructive) { deleting = trip } label: {
                                 Label("削除", systemImage: "trash")
                             }
@@ -131,6 +133,13 @@ struct AllTripsSheet: View {
         )
         trip.name = edited.name
         trip.isNameAuto = edited.isAuto
+        try? modelContext.save()
+    }
+
+    // MARK: - Duplicate
+
+    private func duplicate(_ trip: Trip) {
+        trip.duplicate(existingNames: trips.map(\.name), in: modelContext)
         try? modelContext.save()
     }
 

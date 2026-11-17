@@ -97,6 +97,7 @@ struct ActionHomeSheet: View {
     @State private var waitingProposal: SceneRequest?
     @State private var proposing: SceneRequest?
     @State private var applied = false
+    @State private var note = ""
 
     private let text = DateText(calendar: .current, holidays: .bundled)
 
@@ -119,9 +120,7 @@ struct ActionHomeSheet: View {
                 }
                 if let today {
                     nowCard(today)
-                    if let now = today.now, !today.remaining.isEmpty {
-                        AskCard { asking = AskRequest(id: now.item.id, states: $0) }
-                    }
+                    AskCard { asking = AskRequest(id: today.now?.item.id ?? UUID(), states: $0) }
                     if !today.remaining.isEmpty {
                         remaining(today)
                     }
@@ -140,11 +139,12 @@ struct ActionHomeSheet: View {
         .task(id: trip.items.count) { await loadTravel() }
         .onChange(of: askRequested, initial: true) { _, asked in if asked { openAskFromPreparation() } }
         .sheet(item: $asking, onDismiss: openWaitingProposal) { request in
-            StateTilesSheet(initial: request.states) { states, strength in
+            StateTilesSheet(initial: request.states, onNoteChange: { note = $0 }) { states, strength in
                 let plans = today.map { trip.items(on: $0.day).map { $0.snapshot() } } ?? []
                 waitingProposal = SceneRequest(
                     id: request.id, plans: plans, states: states, strength: strength,
-                    currentStartMinutes: today?.now?.slot.startMinutes
+                    currentStartMinutes: today?.now?.slot.startMinutes,
+                    freeDay: today?.now == nil ? today?.day : nil, note: note
                 )
                 asking = nil
             }
@@ -166,8 +166,8 @@ struct ActionHomeSheet: View {
     /// 「いまどうする？」 pressed in 準備: the tiles open here for the plan that is 今, as the card would.
     private func openAskFromPreparation() {
         askRequested = false
-        guard let today, let now = today.now, !today.remaining.isEmpty else { return }
-        asking = AskRequest(id: now.item.id, states: [])
+        guard let today else { return }
+        asking = AskRequest(id: today.now?.item.id ?? UUID(), states: [])
     }
 
     private func showApplied() {

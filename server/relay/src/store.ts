@@ -18,6 +18,19 @@ export interface Store {
 export class D1Store implements Store {
   constructor(private readonly db: D1Database) {}
 
+  /// UPDATE条件で同時呼び出しも上限内に収める。検索3回と一言1回は別に数える。
+  async takeSession(device: string, session: string, operation: "interpret" | "hours", day: string): Promise<boolean> {
+    const column = operation === "interpret" ? "intakes" : "searches";
+    const limit = operation === "interpret" ? 1 : 3;
+    const [, update] = await this.db.batch([
+      this.db.prepare("INSERT INTO scene_sessions(device, session, day) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING")
+        .bind(device, session, day),
+      this.db.prepare(`UPDATE scene_sessions SET ${column} = ${column} + 1 WHERE device = ?1 AND session = ?2 AND ${column} < ?3`)
+        .bind(device, session, limit),
+    ]);
+    return update.meta.changes === 1;
+  }
+
   async getCheck(key: string, nowMs: number): Promise<CheckResult | null> {
     const row = await this.db
       .prepare("SELECT result FROM checks WHERE key = ?1 AND expires_at > ?2")
@@ -75,6 +88,7 @@ export class D1Store implements Store {
   async sweep(oldestDay: string, nowMs: number): Promise<void> {
     await this.db.batch([
       this.db.prepare("DELETE FROM usage WHERE day < ?1").bind(oldestDay),
+      this.db.prepare("DELETE FROM scene_sessions WHERE day < ?1").bind(oldestDay),
       this.db.prepare("DELETE FROM checks WHERE expires_at <= ?1").bind(nowMs),
     ]);
   }

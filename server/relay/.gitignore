@@ -1,3 +1,5 @@
 node_modules/
 .wrangler/
 .dev.vars
+# 評価用に保存した検索結果。他社のページの抜粋を含むため公開リポジトリに載せない。
+eval/luggage/search/

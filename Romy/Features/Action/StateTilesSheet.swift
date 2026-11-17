@@ -1,28 +1,46 @@
 import SwiftUI
 
-/// 「いまどうする？」 (Figma 26-02・03・04; Notion 02 §6-4 2026-10-25・27): the person picks how they are with emoji tiles
-/// (any number), and, when tired, how tired on a slider whose face and words change and whose feel grows stronger each
-/// step up. 「一言そえる」 is not offered yet: free words need the AI (後半).
+/// 状態と任意の一言を選ぶ。一言の入力欄は、端末内で解釈できる端末だけに表示する。
 struct StateTilesSheet: View {
     /// The tiles chosen from the Home card's chips.
     let initial: Set<ActionState>
     var initialStrength: TiredStrength = .quite
     var initiallyAskingStrength = false
+    var initialNote = ""
+    var onNoteChange: (String) -> Void = { _ in }
     /// 「この内容で探す」 with the states and, when tired, how tired.
     let onSearch: (Set<ActionState>, TiredStrength?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var states: Set<ActionState> = []
     @State private var strength: TiredStrength = .quite
     @State private var isAskingStrength = false
+
+    @State private var note = ""
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            if isAskingStrength { strengthPage } else { tilesPage }
-            Spacer(minLength: 0)
+            GeometryReader { _ in
+                // 進むと左へ、戻ると右へ。下の主ボタンは同じ位置に残す。
+                ZStack(alignment: .topLeading) {
+                    if isAskingStrength {
+                        strengthPage
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .transition(reduceMotion ? .identity : .move(edge: .trailing))
+                    } else {
+                        ScrollView { tilesPage }
+                            .scrollDismissesKeyboard(.interactively)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .transition(reduceMotion ? .identity : .move(edge: .leading))
+                    }
+                }
+                .animation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0), value: isAskingStrength)
+                .clipped()
+            }
             mainButton
         }
         .padding(.horizontal, 20)
@@ -33,27 +51,41 @@ struct StateTilesSheet: View {
             states = initial
             strength = initialStrength
             isAskingStrength = initiallyAskingStrength
+            note = initialNote
         }
-        .animation(.snappy, value: isAskingStrength)
     }
 
     private var header: some View {
         HStack {
             if isAskingStrength {
-                Button { isAskingStrength = false } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold))
+                Button {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                    isAskingStrength = false
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .frame(minWidth: 44, minHeight: 44)
                 .accessibilityLabel("状態を選び直す")
             }
             Text(isAskingStrength ? "どれくらい疲れた？" : "いまどうする？").font(Theme.jp(24, .bold))
             Spacer()
-            Button("閉じる") { dismiss() }
-                .font(Theme.jp(14, .bold))
-                .padding(.horizontal, 16)
-                .frame(height: 36)
-                .background(Capsule().fill(Theme.fill))
-                .buttonStyle(.plain)
+            Button {
+                // シートを閉じる前に返す。破棄されるViewの状態変化には依存させない。
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.regular)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("閉じる")
         }
         .foregroundStyle(Theme.ink)
     }
@@ -66,7 +98,24 @@ struct StateTilesSheet: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(ActionState.allCases, id: \.self) { state in tile(state) }
             }
+            // 一言は端末内で解釈できる端末だけで受け付ける。非対応端末では外部へ送らず、状態だけで探す。
+            if OnDeviceIntake.isAvailable { noteField }
         }
+    }
+
+    private var noteField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("一言そえる（任意）").font(Theme.jp(14, .bold))
+            TextField("甘いもの、徒歩5分以内、30分休みたい", text: $note, axis: .vertical)
+                .font(Theme.jp(14)).lineLimit(2...4)
+                .padding(14)
+                .background(Theme.fill, in: .rect(cornerRadius: 16))
+                .onChange(of: note) { _, value in
+                    if value.count > 300 { note = String(value.prefix(300)) }
+                }
+            Text("食べたいもの・歩ける時間・休む時間・全体の時間を指定できます。")
+                .font(Theme.jp(12)).foregroundStyle(Theme.secondary)
+        }.padding(.top, 12)
     }
 
     private func tile(_ state: ActionState) -> some View {
@@ -117,7 +166,7 @@ struct StateTilesSheet: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(Theme.fill))
         }
         .sensoryFeedback(trigger: strength) { old, new in
-            guard new > old else { return nil }
+            if new < old { return .selection }
             let weight: SensoryFeedback.Weight = [.light, .medium, .heavy][new.impact.weight]
             return .impact(weight: weight, intensity: new.impact.intensity)
         }
@@ -129,20 +178,28 @@ struct StateTilesSheet: View {
     private var mainButton: some View {
         let asksStrength = !isAskingStrength && states.contains(.tired)
         return Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             if asksStrength {
                 isAskingStrength = true
             } else {
-                onSearch(states, states.contains(.tired) ? strength : nil)
+                // 一言は端末内だけで解釈し外へ送らないため、送信の同意は求めない。
+                submit()
             }
         } label: {
             Text(asksStrength ? "次へ" : "この内容で探す")
                 .font(Theme.jp(17, .bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Capsule().fill(states.isEmpty ? Theme.faint : Theme.ink))
+                .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .disabled(states.isEmpty)
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
+        .tint(Theme.ink)
+        .disabled(states.isEmpty && note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func submit() {
+        onNoteChange(note.trimmingCharacters(in: .whitespacesAndNewlines))
+        onSearch(states, states.contains(.tired) ? strength : nil)
     }
 }
 

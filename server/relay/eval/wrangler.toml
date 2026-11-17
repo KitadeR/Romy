@@ -1,0 +1,8 @@
+# 評価専用のWorker。保存した検索結果を本番と同じ読み取り・判定に通す。公開しない（wrangler dev だけで使う）。
+name = "romy-relay-eval"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+
+[ai]
+binding = "AI"
+remote = true

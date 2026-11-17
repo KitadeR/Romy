@@ -25,7 +25,7 @@ nonisolated struct FactRelay {
     var token: String?
     var session: URLSession = .shared
 
-    func luggage(title: String, placeID: String?, area: String?) async -> LuggageFact? {
+    func luggage(title: String, placeID: String?, area: String?, sceneID: UUID? = nil) async -> LuggageFact? {
         guard let baseURL else { return nil }
         let address = await Self.address(placeID: placeID) ?? area
         var place: [String: String] = ["name": title]
@@ -37,7 +37,8 @@ nonisolated struct FactRelay {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.deviceID, forHTTPHeaderField: "X-Romy-Device")
         if let token { request.setValue(token, forHTTPHeaderField: "X-Romy-Token") }
-        let body: [String: Any] = ["kind": "luggage_before_checkin", "place": place]
+        var body: [String: Any] = ["kind": "luggage_before_checkin", "place": place]
+        body["session"] = sceneID?.uuidString
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await session.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
@@ -71,7 +72,7 @@ nonisolated struct FactRelay {
     }
 
     /// An ID for the relay's daily cap only, not tied to the person; stage 3 uses the App Attest key instead.
-    private static var deviceID: String {
+    static var deviceID: String {
         let key = "factRelayDeviceID"
         if let id = UserDefaults.standard.string(forKey: key) { return id }
         let id = UUID().uuidString
@@ -117,7 +118,10 @@ extension LuggageFacts {
                 item.luggageFact = fact
                 try? item.modelContext?.save()
             },
-            allowed: { LuggageConsent.current == .allowed }
+            allowed: { LuggageConsent.current == .allowed },
+            inSession: { stay, session in
+                await relay.luggage(title: stay.title, placeID: stay.placeID, area: stay.area, sceneID: session)
+            }
         )
     }
 }

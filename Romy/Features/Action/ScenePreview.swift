@@ -7,6 +7,8 @@ struct ScenePreview: View {
     let input: SceneInput
     let request: SceneRequest
     let problem: SceneApply.Problem?
+    var hoursPermit = true
+    var checkingHours = false
     let onApply: () -> Void
 
     private var added: [SceneStep] {
@@ -24,7 +26,7 @@ struct ScenePreview: View {
             Text(caption).font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 10) {
-                row(time: input.nowMinutes, title: "📍 今いる所", detail: currentDetail, tag: nil)
+                row(time: input.nowMinutes, title: "📍 \(input.origin.name)", detail: currentDetail, tag: nil)
                 ForEach(Array(option.way.steps.enumerated()), id: \.offset) { _, step in
                     Text("徒歩 \(step.walkBeforeMinutes)分").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                         .padding(.leading, 60)
@@ -40,12 +42,16 @@ struct ScenePreview: View {
             }
             Button(action: onApply) {
                 Text("この内容で旅程に入れる").font(Theme.jp(16, .bold))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(Theme.surface)
-                    .background(option.way.fits ? Theme.ink : Theme.actionSecondary, in: .capsule)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
-            .disabled(!option.way.fits)
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .tint(Theme.ink)
+            .disabled(!option.way.fits || option.isUnavailable || !hoursPermit || checkingHours)
+            if checkingHours { ProgressView("営業時間を確認中") }
+            if !hoursPermit { Text("公式の営業時間に収まらないため、この案は選べません。") }
+            if option.isUnavailable { Text(option.luggageCaption ?? "この案は利用できません") }
             Text("入れたあと、下の通知の「元に戻す」で元の旅程に戻せます。")
                 .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
         }
@@ -81,7 +87,7 @@ struct ScenePreview: View {
         case .dropLuggage: return step.isUnknown ? "預けられるかは未確認です" : nil
         case .lockerDrop: return "ロッカーの空きは分かりません"
         case .lockerPickUp: return nil
-        case .rest, .eat: return "約\(stay)（席の空き・営業時間は分かりません）"
+        case .rest, .eat: return "約\(stay)（空席は未確認。営業時間は詳細の確認結果をご覧ください）"
         case .checkIn: return "部屋で休む（約\(stay)）"
         case .next: return "\(DaySchedule.clock(step.arriveMinutes))に着く目安"
         }

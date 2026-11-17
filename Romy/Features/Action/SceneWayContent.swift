@@ -15,23 +15,24 @@ extension SceneStep.Kind {
 }
 
 extension SceneWay {
-    var stepsCaption: String {
-        steps.map { step in
-            let title: String = switch step.kind {
-            case .dropLuggage: "宿に預ける"
-            case .lockerDrop: "預ける"
-            case .lockerPickUp: "取る"
-            case .checkIn: DaySchedule.clock(step.startMinutes)
-            case .next: DaySchedule.clock(step.startMinutes + slackMinutes)
-            case .rest, .eat: step.title
-            }
-            return "\(step.kind.emoji) \(title)\(step.isUnknown ? "？" : "")"
-        }.joined(separator: " › ")
-    }
-
     /// The place the way adds to sit in (a rest or a meal), whose picture leads the card.
     var seatPlace: ProposalPlace? {
         steps.first { $0.kind == .rest || $0.kind == .eat }?.place
+    }
+
+    /// カードでは順序だけを見せ、各地点の時刻は詳細で示す。
+    var stopSequence: String {
+        steps.map { step in
+            switch step.kind {
+            case .dropLuggage: "宿に預ける"
+            case .rest: "カフェ"
+            case .eat: "食事"
+            case .checkIn: "宿"
+            case .lockerDrop: "ロッカーに預ける"
+            case .lockerPickUp: "荷物を受け取る"
+            case .next: step.title
+            }
+        }.joined(separator: " → ")
     }
 
     var verificationCaption: String {
@@ -45,75 +46,49 @@ extension SceneWay {
     }
 }
 
-struct SceneWayRow: View {
+struct SceneWayCard: View {
     let option: SceneOption
-    let highlighted: Bool
-    let onSelect: () -> Void
-    @Environment(\.dynamicTypeSize) private var typeSize
+    let open: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
-                if typeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 8) { title; sit }
-                } else {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 8) { title; sit }
-                        VStack(alignment: .leading, spacing: 8) { title; sit }
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: 0) {
+                if let place = option.way.seatPlace {
+                    LookAroundPicture(place: place, height: 128)
+                        .id(place.scenePlaceKey).accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("\(option.id)案  ·  \(option.way.reason.headline)")
+                        .font(Theme.jp(13, .medium)).foregroundStyle(Theme.actionSecondary)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(option.way.seatPlace?.name ?? option.way.steps.first?.title ?? option.way.reason.headline)
+                            .font(Theme.jp(20, .bold))
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right").font(.caption.bold()).accessibilityHidden(true)
+                    }
+                    Text("徒歩\(option.way.walkMinutes)分  ·  休憩 約\(DurationText.text(minutes: option.way.sitMinutes))")
+                        .font(Theme.jp(15, .medium)).monospacedDigit()
+                    Text(option.way.stopSequence)
+                        .font(Theme.jp(13)).foregroundStyle(Theme.actionSecondary)
+                    if !option.way.fits {
+                        Text("\(option.way.shortfallMinutes)分足りません").font(Theme.jp(14, .bold))
+                    }
+                    if let caption = option.luggageCaption {
+                        Text(caption).font(Theme.jp(13)).foregroundStyle(Theme.actionSecondary)
+                    } else if option.way.hasUnknown {
+                        Text(option.way.verificationCaption).font(Theme.jp(13)).foregroundStyle(Theme.actionSecondary)
                     }
                 }
-                if let seat = option.way.seatPlace {
-                    LookAroundPicture(place: seat)
-                        .opacity(option.isUnavailable ? 0.4 : 1)
-                }
-                Text(option.way.stepsCaption).font(Theme.jp(12, .medium))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .opacity(option.isUnavailable ? 0.4 : 1)
-                Text(option.way.endsAtPlan || !option.way.fits ? "徒歩\(option.way.walkMinutes)分 ・ \(slack)"
-                     : "徒歩\(option.way.walkMinutes)分")
-                    .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .opacity(option.isUnavailable ? 0.4 : 1)
-                // A ✗ keeps its own line readable while the rest of the row is dimmed (Figma 23 2版 03).
-                Text(option.luggageCaption ?? option.way.verificationCaption)
-                    .font(Theme.jp(12, option.isUnavailable ? .medium : .regular))
-                    .foregroundStyle(option.isUnavailable ? Theme.ink : Theme.actionSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(16)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(highlighted ? Theme.base : Theme.surface, in: .rect(cornerRadius: 16))
-            .contentShape(Rectangle())
+            .foregroundStyle(Theme.ink)
+            .background(Theme.surface, in: .rect(cornerRadius: 20))
+            .clipShape(.rect(cornerRadius: 20))
+            .contentShape(.rect(cornerRadius: 20))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Theme.ink)
-        .disabled(option.isUnavailable)
         .accessibilityElement(children: .combine)
-        .accessibilityHint(option.isUnavailable ? "この宿には預けられないため選べません" : "この案の要約を表示")
-    }
-
-    private var title: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(option.id).font(Theme.latin(12, .bold)).foregroundStyle(.white)
-                .frame(width: 26, height: 26).background(Theme.ink, in: .circle)
-            Text(option.way.reason.headline).font(Theme.jp(15, .bold))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .opacity(option.isUnavailable ? 0.4 : 1)
-    }
-
-    private var sit: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            Text("約\(DurationText.text(minutes: option.way.sitMinutes))").font(Theme.jp(15, .bold))
-            Text("座って休める").font(Theme.jp(10, .medium)).foregroundStyle(Theme.actionSecondary)
-        }
-        .fixedSize(horizontal: !typeSize.isAccessibilitySize, vertical: true)
-        .opacity(option.isUnavailable ? 0.4 : 1)
-    }
-
-    private var slack: String {
-        option.way.fits ? "余裕\(option.way.slackMinutes)分" : "\(option.way.shortfallMinutes)分足りない"
+        .accessibilityHint("この案の詳細を表示")
     }
 }
 
@@ -121,6 +96,8 @@ struct SceneWayRow: View {
 struct SceneWaySummary: View {
     let option: SceneOption
     let input: SceneInput
+    let footnote: String
+    let onReplace: (Int) -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
     /// Apple's place card open for a place of the way.
     @State private var appleCard: AppleCardItem?
@@ -135,7 +112,7 @@ struct SceneWaySummary: View {
             Text("\(option.id)  \(option.way.reason.headline)").font(Theme.jp(17, .bold))
             if let seat = option.way.seatPlace {
                 VStack(alignment: .leading, spacing: 8) {
-                    LookAroundPicture(place: seat, height: 160)
+                    LookAroundPicture(place: seat, height: 160).id(seat.scenePlaceKey)
                     if seat.placeID != nil { appleCardButton(seat) }
                 }
             }
@@ -146,15 +123,15 @@ struct SceneWaySummary: View {
             }
             if case .checked(let fact) = option.luggage {
                 LuggageFactDetail(fact: fact)
-            } else {
+            } else if option.luggageCaption != nil || option.way.hasUnknown {
                 Text(option.luggageCaption ?? option.way.verificationCaption)
                     .font(Theme.jp(13, .medium)).foregroundStyle(Theme.actionSecondary)
             }
-            Text("座って休める時間は滞在の目安です。席の空き・営業時間は確認していません。")
+            Text(footnote)
                 .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
             Divider()
             Text("手順と時刻").font(Theme.jp(15, .bold))
-            ForEach(Array(option.way.steps.enumerated()), id: \.offset) { _, step in
+            ForEach(Array(option.way.steps.enumerated()), id: \.offset) { index, step in
                 VStack(alignment: .leading, spacing: 6) {
                     if step.walkBeforeMinutes > 0 {
                         Text("徒歩 \(step.walkBeforeMinutes)分").font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
@@ -165,6 +142,14 @@ struct SceneWaySummary: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(step.kind.emoji) \(step.title)\(step.isUnknown ? " ？" : "")")
                                 .font(Theme.jp(15, .medium))
+                            if step.kind == .rest || step.kind == .eat {
+                                Button(step.kind == .eat ? "別の食事先を探す" : "別のカフェを探す") {
+                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                                    onReplace(index)
+                                }
+                                    .font(Theme.jp(14, .medium)).buttonStyle(.glass).tint(Theme.ink)
+                                    .disabled(option.isUnavailable)
+                            }
                             if step.kind == .next {
                                 Text("予約・固定の時刻は動かしません（\(DaySchedule.clock(step.arriveMinutes))到着の目安）")
                                     .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
@@ -191,6 +176,7 @@ struct SceneWaySummary: View {
     /// 「写真・営業時間を見る」: Apple's own place card, where the place's photos and hours are.
     private func appleCardButton(_ place: ProposalPlace) -> some View {
         Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             Task {
                 if let item = await PlacePhotos.mapItem(of: place) { appleCard = AppleCardItem(item: item) }
             }
@@ -198,10 +184,11 @@ struct SceneWaySummary: View {
             Label("\(place.name)の写真・営業時間（Appleマップ）", systemImage: "photo.on.rectangle")
                 .font(Theme.jp(12, .medium))
                 .multilineTextAlignment(.leading)
-                .padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 44)
-                .background(Theme.base, in: .capsule)
+
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .controlSize(.regular)
+        .frame(minHeight: 44)
     }
 
     @ViewBuilder private var metrics: some View {

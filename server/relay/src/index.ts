@@ -1,6 +1,8 @@
-import { runCheck } from "./check";
+import { parseScene, runScene } from "./scene";
+import { japanDay, runCheck } from "./check";
 import { isKind } from "./kinds";
 import { perplexity } from "./perplexity";
+import { searchAndRead, type Reader } from "./searchReader";
 import { D1Store } from "./store";
 import { tokenAllows } from "./token";
 import type { CheckRequest, CheckResponse } from "./types";
@@ -8,6 +10,8 @@ import type { CheckRequest, CheckResponse } from "./types";
 export interface Env {
   DB: D1Database;
   PERPLEXITY_API_KEY?: string;
+  /// Workers AI, which reads the Search API excerpts (free daily Neurons; Notion 04 2026-11-17).
+  AI: Reader;
   /// The app's passphrase on the published relay (a secret); unset on the Mac.
   APP_TOKEN?: string;
   DEVICE_DAILY_SEARCHES: string;
@@ -21,7 +25,7 @@ export interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname !== "/v1/check") return new Response("Not found", { status: 404 });
+    if (!["/v1/check", "/v1/scene"].includes(url.pathname)) return new Response("Not found", { status: 404 });
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     if (!tokenAllows(env.APP_TOKEN, request.headers.get("X-Romy-Token"))) {
       return new Response("Forbidden", { status: 403 });
@@ -29,14 +33,32 @@ export default {
 
     const device = request.headers.get("X-Romy-Device") ?? "";
     if (!/^[A-Za-z0-9_\-=+/]{8,128}$/.test(device)) return new Response("Bad device", { status: 400 });
-    const body = parse(await request.json().catch(() => null));
+    const value = await request.json().catch(() => null);
+    const store = new D1Store(env.DB);
+    const takeSession = (session: string, operation: "interpret" | "hours" = "hours") =>
+      store.takeSession(device, session, operation, japanDay(new Date()));
+    if (url.pathname === "/v1/scene") {
+      const scene = parseScene(value);
+      if (!scene) return new Response("Bad request", { status: 400 });
+      if (!env.PERPLEXITY_API_KEY) return Response.json({ reason: "error" });
+      const reply = await runScene(scene, device, {
+        store, takeSession,
+        search: searchAndRead(env.PERPLEXITY_API_KEY, env.AI),
+        interpret: perplexity(env.PERPLEXITY_API_KEY, fetch, { intake: true, retrySchema: false }),
+        limits: { deviceDaily: Number(env.DEVICE_DAILY_SEARCHES), globalUSD: Number(env.GLOBAL_DAILY_USD),
+          reserveUSD: Number(env.RESERVE_USD) },
+        now: () => new Date(),
+      });
+      return Response.json(reply);
+    }
+    const body = parse(value);
     if (!body) return new Response("Bad request", { status: 400 });
 
     const started = Date.now();
     const result: CheckResponse = env.PERPLEXITY_API_KEY
       ? await runCheck(body, device, {
-          store: new D1Store(env.DB),
-          search: perplexity(env.PERPLEXITY_API_KEY),
+          store, takeSession,
+          search: searchAndRead(env.PERPLEXITY_API_KEY, env.AI),
           limits: {
             deviceDaily: Number(env.DEVICE_DAILY_SEARCHES),
             globalUSD: Number(env.GLOBAL_DAILY_USD),
@@ -56,14 +78,15 @@ export default {
 
 function parse(value: unknown): CheckRequest | null {
   if (typeof value !== "object" || value === null) return null;
-  const { kind, place } = value as Record<string, unknown>;
+  const { kind, place, session } = value as Record<string, unknown>;
+  if (session !== undefined && (typeof session !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(session))) return null;
   if (!isKind(kind) || typeof place !== "object" || place === null) return null;
   const { id, name, address } = place as Record<string, unknown>;
   if (typeof name !== "string" || name.trim() === "" || name.length > 100) return null;
   if (address !== undefined && (typeof address !== "string" || address.length > 200)) return null;
   if (id !== undefined && (typeof id !== "string" || id.length > 200)) return null;
   return {
-    kind,
+    kind, session: session as string | undefined,
     place: { id: id || undefined, name: name.trim(), address: (address as string | undefined)?.trim() || undefined },
   };
 }

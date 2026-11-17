@@ -1,0 +1,62 @@
+[
+ {
+  "id": "granvia-kyoto",
+  "name": "ホテルグランヴィア京都",
+  "address": "京都府京都市下京区烏丸通塩小路下ル東塩小路町901"
+ },
+ {
+  "id": "keihan-kyoto-grande",
+  "name": "ホテル京阪 京都 グランデ",
+  "address": "京都府京都市南区東九条西山王町31"
+ },
+ {
+  "id": "fav-lux-hida",
+  "name": "FAV LUX 飛騨高山",
+  "address": "岐阜県高山市花里町6丁目101番"
+ },
+ {
+  "id": "fav-takayama",
+  "name": "FAV TAKAYAMA",
+  "address": "岐阜県高山市"
+ },
+ {
+  "id": "kyoto-tower-hotel",
+  "name": "京都タワーホテル",
+  "address": "京都府京都市下京区烏丸通七条下ル東塩小路町721-1"
+ },
+ {
+  "id": "daiwa-roynet-kyoto-ekimae",
+  "name": "ダイワロイネットホテル京都駅前",
+  "address": "京都府京都市下京区東洞院通七条下ル塩小路町"
+ },
+ {
+  "id": "mitsui-garden-kyoto-ekimae",
+  "name": "三井ガーデンホテル京都駅前",
+  "address": "京都府京都市下京区東洞院通塩小路上ル"
+ },
+ {
+  "id": "miyako-city-kintetsu-kyoto",
+  "name": "都シティ 近鉄京都駅",
+  "address": "京都府京都市下京区東塩小路釜殿町1-9"
+ },
+ {
+  "id": "rihga-royal-kyoto",
+  "name": "リーガロイヤルホテル京都",
+  "address": "京都府京都市下京区東堀川通塩小路下ル松明町1"
+ },
+ {
+  "id": "granvia-osaka",
+  "name": "ホテルグランヴィア大阪",
+  "address": "大阪府大阪市北区梅田3-1-1"
+ },
+ {
+  "id": "hankyu-respire-osaka",
+  "name": "ホテル阪急レスパイア大阪",
+  "address": "大阪府大阪市北区大深町1-1"
+ },
+ {
+  "id": "toyoko-kyoto-gojo-karasuma",
+  "name": "東横INN京都五条烏丸",
+  "address": "京都府京都市下京区"
+ }
+]

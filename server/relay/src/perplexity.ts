@@ -5,26 +5,35 @@ export interface SearchAnswer {
   costUSD?: number;
 }
 
-export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>) => Promise<SearchAnswer>;
+/// For the Search API + Workers AI reader: `query` is what to search for, and `mention` is the place's name,
+/// which an excerpt must contain to be read at all.
+export interface SearchOptions {
+  query?: string;
+  mention?: string;
+}
+
+export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>,
+  options?: SearchOptions) => Promise<SearchAnswer>;
 
 const endpoint = "https://api.perplexity.ai/v1/agent";
 
 /// Perplexity's Agent API with Sonar and web search, as in the 2026-10-19 probe (Romy-probe `ProbeClients.swift`).
 /// No location is sent (Notion 04「2026-10-29｜各社のデータの扱い」①): only the country, so Japanese pages come first.
 /// When the API refuses the JSON schema, it is asked once more without it, as the probe did.
-export function perplexity(key: string, send: typeof fetch = fetch): SearchAI {
+export function perplexity(key: string, send: typeof fetch = fetch,
+  options: { intake?: boolean; retrySchema?: boolean } = {}): SearchAI {
   return async (instructions, input, schema) => {
     const body: Record<string, unknown> = {
-      model: "perplexity/sonar",
+      model: options.intake ? "openai/gpt-6-luna" : "perplexity/sonar",
       instructions,
       input,
       max_output_tokens: 2000,
       response_format: { type: "json_schema", json_schema: { name: "answer", schema } },
-      tools: [{ type: "web_search", search_type: "web", user_location: { country: "JP" } }],
+      tools: options.intake ? [] : [{ type: "web_search", search_type: "web", user_location: { country: "JP" } }],
       max_steps: 3,
     };
     let response = await post(send, key, body);
-    if (response.status === 400) {
+    if (response.status === 400 && options.retrySchema !== false) {
       delete body.response_format;
       response = await post(send, key, body);
     }

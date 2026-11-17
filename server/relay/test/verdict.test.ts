@@ -59,8 +59,12 @@ describe("decideLuggage", () => {
   it("is ？ for another branch, another town, a chain-wide page or a conflict", () => {
     expect(decideLuggage(place, { ...yes, found_name: "ホテル大阪梅田" }, [official]).status).toBe("unknown");
     expect(decideLuggage(place, { ...yes, found_address: "大阪府大阪市北区1" }, [official]).status).toBe("unknown");
-    expect(decideLuggage(place, { ...yes, applies_to_this_hotel: "unknown" }, [official]).status).toBe("unknown");
+    expect(decideLuggage(place, { ...yes, applies_to_this_hotel: "no" }, [official]).status).toBe("unknown");
     expect(decideLuggage(place, { ...yes, conflicting: true }, [official]).status).toBe("unknown");
+  });
+
+  it("does not let the reader's 'unknown' override a matching name, town and official page", () => {
+    expect(decideLuggage(place, { ...yes, applies_to_this_hotel: "unknown" }, [official]).status).toBe("official");
   });
 
   it("takes back a yes whose conditions doubt it", () => {

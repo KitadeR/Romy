@@ -17,6 +17,7 @@ export interface PlaceInput {
 export interface CheckRequest {
   kind: CheckKind;
   place: PlaceInput;
+  session?: string;
 }
 
 export interface Source {
@@ -38,6 +39,7 @@ export interface CheckResult {
   foundName?: string;
   /// When Romy checked, shown as 「10/20に確認」; a cached result keeps its own date.
   checkedAt: string;
+  hours?: import("./scene").Hours;
 }
 
 export interface CheckResponse extends CheckResult {

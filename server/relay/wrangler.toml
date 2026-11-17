@@ -17,6 +17,11 @@ database_name = "romy-relay"
 database_id = "4c96f72e-8c3e-4bf8-b0d4-4c847c1f3584"
 migrations_dir = "migrations"
 
+# Workers AI reads the Search API excerpts (Gemma 4). Always remote, also under `wrangler dev`.
+[ai]
+binding = "AI"
+remote = true
+
 [vars]
 # Spending caps (Notion 04「2026-10-28｜費用の上限」). Kept here so they can change without code.
 DEVICE_DAILY_SEARCHES = "15"
