@@ -5,6 +5,7 @@ struct StateTilesSheet: View {
     /// The tiles chosen from the Home card's chips.
     let initial: Set<ActionState>
     var initialStrength: TiredStrength = .quite
+    var initiallyAskingStrength = false
     var initialNote = ""
     var onNoteChange: (String) -> Void = { _ in }
     /// 「この内容で探す」 with the states and, when tired, how tired.
@@ -49,6 +50,7 @@ struct StateTilesSheet: View {
         .onAppear {
             states = initial
             strength = initialStrength
+            isAskingStrength = initiallyAskingStrength
             note = initialNote
         }
     }

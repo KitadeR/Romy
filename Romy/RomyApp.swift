@@ -16,9 +16,19 @@ struct RomyApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if FenrirCapture.screen != nil {
+                FenrirCaptureHost()
+                    .modelContainer(FenrirCapture.container)
+            } else {
+                RootView()
+                    .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
+            }
+            #else
             RootView()
+                .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
+            #endif
         }
-        .modelContainer(for: [Trip.self, ItineraryItem.self, WishPlace.self])
     }
 }
 
