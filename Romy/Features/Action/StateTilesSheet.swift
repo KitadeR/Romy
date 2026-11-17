@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// 「いまどうする？」 (Figma 26-02・03・04; Notion 02 §6-4 2026-10-25・27): the person picks how they are with emoji tiles
-/// (any number), and, when tired, how tired on a slider whose face and words change and whose feel grows stronger each
-/// step up. 「一言そえる」 is not offered yet: free words need the AI (後半).
+/// 状態と任意の一言を選ぶ。送信内容の説明は、一言を初めて使うときだけ表示する。
 struct StateTilesSheet: View {
     /// The tiles chosen from the Home card's chips.
     let initial: Set<ActionState>
     var initialStrength: TiredStrength = .quite
+    var initialNote = ""
+    var onNoteChange: (String) -> Void = { _ in }
     /// 「この内容で探す」 with the states and, when tired, how tired.
     let onSearch: (Set<ActionState>, TiredStrength?) -> Void
 
@@ -15,6 +15,10 @@ struct StateTilesSheet: View {
     @State private var states: Set<ActionState> = []
     @State private var strength: TiredStrength = .quite
     @State private var isAskingStrength = false
+
+    @State private var note = ""
+    @State private var explainsNote = false
+    @AppStorage("romy.scene.noteConsent") private var noteConsent = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
@@ -29,7 +33,8 @@ struct StateTilesSheet: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .transition(reduceMotion ? .identity : .move(edge: .trailing))
                     } else {
-                        tilesPage
+                        ScrollView { tilesPage }
+                            .scrollDismissesKeyboard(.interactively)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .transition(reduceMotion ? .identity : .move(edge: .leading))
                     }
@@ -43,7 +48,17 @@ struct StateTilesSheet: View {
         .padding(.top, 24)
         .padding(.bottom, 8)
         .background(Theme.surface.ignoresSafeArea())
-        .onAppear { states = initial; strength = initialStrength }
+        .onAppear {
+            states = initial
+            strength = initialStrength
+            note = initialNote
+        }
+        .alert("一言を検索条件にする", isPresented: $explainsNote) {
+            Button("同意して探す") { noteConsent = true; submit() }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("入力した一言をRomyの中継サーバー経由でPerplexityとOpenAIへ送り、食べたいもの・歩く時間・使える時間を読み取ります。旅程全体や現在地は送りません。一言はRomyのサーバーに保存しません。")
+        }
     }
 
     private var header: some View {
@@ -89,6 +104,18 @@ struct StateTilesSheet: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(ActionState.allCases, id: \.self) { state in tile(state) }
             }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("一言そえる（任意）").font(Theme.jp(14, .bold))
+                TextField("甘いもの、徒歩5分以内、30分休みたい", text: $note, axis: .vertical)
+                    .font(Theme.jp(14)).lineLimit(2...4)
+                    .padding(14)
+                    .background(Theme.fill, in: .rect(cornerRadius: 16))
+                    .onChange(of: note) { _, value in
+                        if value.count > 300 { note = String(value.prefix(300)) }
+                    }
+                Text("食べたいもの・歩ける時間・休む時間・全体の時間を指定できます。")
+                    .font(Theme.jp(12)).foregroundStyle(Theme.secondary)
+            }.padding(.top, 12)
         }
     }
 
@@ -156,7 +183,9 @@ struct StateTilesSheet: View {
             if asksStrength {
                 isAskingStrength = true
             } else {
-                onSearch(states, states.contains(.tired) ? strength : nil)
+                if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !noteConsent {
+                    explainsNote = true
+                } else { submit() }
             }
         } label: {
             Text(asksStrength ? "次へ" : "この内容で探す")
@@ -167,7 +196,12 @@ struct StateTilesSheet: View {
         .controlSize(.large)
         .buttonBorderShape(.capsule)
         .tint(Theme.ink)
-        .disabled(states.isEmpty)
+        .disabled(states.isEmpty && note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func submit() {
+        onNoteChange(note.trimmingCharacters(in: .whitespacesAndNewlines))
+        onSearch(states, states.contains(.tired) ? strength : nil)
     }
 }
 

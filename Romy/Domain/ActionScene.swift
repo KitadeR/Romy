@@ -30,6 +30,7 @@ struct SceneInput {
     let endMinutes: Int
     let states: Set<ActionState>
     let strength: TiredStrength?
+    var preferences = ScenePreferences()
 
     var hasHeavyLuggage: Bool { states.contains(.heavyLuggage) }
 
@@ -142,13 +143,14 @@ enum ActionScene {
         luggageCheck: LuggageCheck = { _ in .unknown }
     ) async -> [SceneWay] {
         let radius = searchRadius(for: input)
-        let seat = input.states.contains(.hungry) ? mealChip : seatChip
-        let seatKind: SceneStep.Kind = seat == mealChip ? .eat : .rest
+        let seat = seatChip(for: input)
+        let seatKind: SceneStep.Kind = seat.activity == .eat ? .eat : .rest
         let nearHereOnly = input.strength?.restsNearHereOnly ?? false
         let maxAdded = input.strength?.maxAddedPlaces ?? 2
 
         let seatsHere = await ActionCandidates.gather(
-            for: seat, near: input.origin, radiusMeters: radius, search: search
+            for: seat, near: input.origin, radiusMeters: radius,
+            allowCategoryFallback: input.preferences.query == nil, search: search
         ).places
         var plans: [(SceneWay.Reason, [Planned])] = []
 
@@ -179,7 +181,7 @@ enum ActionScene {
         for (reason, steps) in plans {
             let all = steps + (input.next.map { [Planned(.next, $0.title, $0.place)] } ?? [])
             guard let way = await timed(reason, all, input: input, walking: walking),
-                  meetsWalkingLimits(way, strength: input.strength) else { continue }
+                  meetsWalkingLimits(way, strength: input.strength, walkLimit: input.preferences.walkMinutes) else { continue }
             ways.append(way)
         }
         nameLeastWalkingRest(&ways)
@@ -187,16 +189,24 @@ enum ActionScene {
     }
 
     static func searchRadius(for input: SceneInput) -> Double {
-        let available = input.endMinutes - input.nowMinutes
+        let available = min(input.endMinutes - input.nowMinutes, input.preferences.totalMinutes ?? 24 * 60)
         let usual = WalkLimit.oneWayMinutes(availableMinutes: available, walkLess: false)
         let oneWay = input.strength?.oneWayCapMinutes.map { min($0, usual) } ?? usual
-        return WalkLimit.meters(minutes: oneWay)
+        return WalkLimit.meters(minutes: min(oneWay, input.preferences.walkMinutes ?? oneWay))
     }
 
     /// 川や線路を迂回すると、検索半径の内側でも一度に歩ける時間を超えることがある。
-    static func meetsWalkingLimits(_ way: SceneWay, strength: TiredStrength?) -> Bool {
+    static func seatChip(for input: SceneInput) -> ProposalChip {
+        let defaultChip = input.states.contains(.hungry) ? mealChip : seatChip
+        guard let query = input.preferences.query, !query.isEmpty else { return defaultChip }
+        let category = input.preferences.category ?? defaultChip.category
+        return ProposalChip(text: query, activity: category == "restaurant" ? .eat : .rest,
+                            query: query, category: category)
+    }
+
+    static func meetsWalkingLimits(_ way: SceneWay, strength: TiredStrength?, walkLimit: Int? = nil) -> Bool {
         guard way.addedPlaces <= (strength?.maxAddedPlaces ?? 2) else { return false }
-        guard let cap = strength?.oneWayCapMinutes else { return true }
+        guard let cap = [strength?.oneWayCapMinutes, walkLimit].compactMap({ $0 }).min() else { return true }
         return !way.steps.contains {
             [.rest, .eat, .dropLuggage, .lockerDrop].contains($0.kind) && $0.walkBeforeMinutes > cap
         }
@@ -205,11 +215,12 @@ enum ActionScene {
     private static func openStayWays(
         _ input: SceneInput, stay: SceneInput.Stay, seats: [ProposalPlace]
     ) -> [(SceneWay.Reason, [Planned])] {
-        if input.states.contains(.hungry) {
+        if input.states.contains(.hungry) || input.preferences.query != nil {
             return ordered(seats, least: leastDetour(seats, from: input.origin, to: stay.place))
                 .enumerated().map { index, place in
                     (index == 0 ? .leastWalk : .otherSeat, [
-                        Planned(.eat, place.name, place), Planned(.checkIn, stay.title, stay.place)
+                        Planned(seatChip(for: input).activity == .eat ? .eat : .rest, place.name, place),
+                        Planned(.checkIn, stay.title, stay.place)
                     ])
                 }
         } else {
@@ -247,7 +258,8 @@ enum ActionScene {
         let known = check == .official || check == .introduced
         var plans: [(SceneWay.Reason, [Planned])] = []
         let seatsNearStay = context.nearHereOnly ? [] : await ActionCandidates.gather(
-            for: context.seat, near: stay.place, radiusMeters: context.radius, search: context.search
+            for: context.seat, near: stay.place, radiusMeters: context.radius,
+            allowCategoryFallback: context.input.preferences.query == nil, search: context.search
         ).places
         // A stay that officially keeps no luggage is not offered (Notion 02 §6-4, 2026-10-28・29).
         if check != .contradicted,
@@ -319,9 +331,13 @@ enum ActionScene {
             from = step.place
         }
         let hasNext = planned.last?.kind == .next
-        let deadline = input.endMinutes - (hasNext ? ActionGap.marginMinutes : 0)
+        let deadline = min(input.endMinutes - (hasNext ? ActionGap.marginMinutes : 0),
+                           input.nowMinutes + (input.preferences.totalMinutes ?? 24 * 60))
         let checkInIndex = planned.firstIndex { $0.kind == .checkIn }
-        var stays = planned.map(\.kind.minimumMinutes)
+        var stays = planned.map { step in
+            [.rest, .eat].contains(step.kind) ? input.preferences.restMinutes ?? step.kind.minimumMinutes
+                : step.kind.minimumMinutes
+        }
 
         // Before check-in (or before the next plan, or the end, when there is no stay), the last seat takes the
         // spare time.
@@ -330,7 +346,8 @@ enum ActionScene {
             + (split < planned.count ? walks[split] : 0)
         let opens = checkInIndex.flatMap { _ in input.stay?.checkInMinutes } ?? input.nowMinutes
         let target = checkInIndex == nil ? deadline : max(firstPart, opens)
-        if let seat = (0..<split).last(where: { planned[$0].kind.isSeated }) {
+        if input.preferences.restMinutes == nil,
+           let seat = (0..<split).last(where: { planned[$0].kind.isSeated }) {
             stays[seat] += max(0, target - firstPart)
         }
 
@@ -359,11 +376,12 @@ enum ActionScene {
         // Arriving at the fixed plan counts; without one, leaving the last stop. Reaching the stay after it opens
         // is never late when its check-in is the end.
         let arrival = hasNext ? steps.last?.arriveMinutes : steps.last?.leaveMinutes
-        let slack = input.endMinutes - (arrival ?? input.nowMinutes)
+        let slack = min(input.endMinutes, input.nowMinutes + (input.preferences.totalMinutes ?? 24 * 60))
+            - (arrival ?? input.nowMinutes)
         let sit = steps.filter(\.kind.isSeated).reduce(0) { $0 + $1.leaveMinutes - $1.startMinutes }
         return SceneWay(
             reason: reason, steps: steps, walkMinutes: walks.reduce(0, +), sitMinutes: sit,
-            slackMinutes: input.end == .checkIn ? max(0, slack) : slack,
+            slackMinutes: input.end == .checkIn && input.preferences.totalMinutes == nil ? max(0, slack) : slack,
             carryMinutes: carryUntil(steps) - input.nowMinutes
         )
     }

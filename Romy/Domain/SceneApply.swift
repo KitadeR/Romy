@@ -11,6 +11,7 @@ struct SceneApply {
         let latitude: Double
         let longitude: Double
         let durationMinutes: Int
+        var fixedStartMinutes: Int?
     }
 
     enum Problem: Error, Equatable {
@@ -27,7 +28,7 @@ struct SceneApply {
     }
 
     let day: Int
-    let currentID: UUID
+    let currentID: UUID?
     let currentDurationMinutes: Int
     let added: [NewPlan]
     /// Plans before the fixed one that the way leaves out; they go to 未定 (見送る予定 in Figma 25-04).
@@ -42,17 +43,22 @@ struct SceneApply {
         way: SceneWay, request: SceneRequest, searchedAtMinutes: Int, nowMinutes: Int
     ) -> Result<SceneApply, Problem> {
         guard way.fits else { return .failure(.doesNotFit) }
-        guard nowMinutes - searchedAtMinutes <= freshMinutes else { return .failure(.tooLate) }
-        guard let current = request.current, let day = current.day,
+        guard (0...freshMinutes).contains(nowMinutes - searchedAtMinutes) else { return .failure(.tooLate) }
+        guard let day = request.freeDay ?? request.current?.day,
               let ahead = request.ahead(nowMinutes: searchedAtMinutes) else {
             return .failure(.changed)
         }
-        let duration = request.currentStartMinutes.map { max(5, searchedAtMinutes - $0) } ?? current.durationMinutes
+        let duration = request.currentStartMinutes.map { max(5, searchedAtMinutes - $0) }
+            ?? request.current?.durationMinutes ?? 0
+        var added = way.steps.compactMap { newPlan($0) }
+        if request.freeDay != nil, !added.isEmpty {
+            added[0].fixedStartMinutes = way.steps.first(where: \.isAdded)?.startMinutes
+        }
         return .success(SceneApply(
             day: day,
-            currentID: current.id,
+            currentID: request.current?.id,
             currentDurationMinutes: duration,
-            added: way.steps.compactMap { newPlan($0) },
+            added: added,
             skipped: ahead.between.filter { $0.id != ahead.stay?.id },
             basis: request.plans
         ))
@@ -147,10 +153,11 @@ extension Trip {
                 latitude: plan.latitude, longitude: plan.longitude
             )
             item.durationMinutes = plan.durationMinutes
+            item.fixedStartMinutes = plan.fixedStartMinutes
             item.travelMode = .walking
             return item
         }
-        let afterNow = (list.firstIndex { $0.id == change.currentID }).map { $0 + 1 } ?? 0
+        let afterNow = (list.firstIndex { $0.id == change.currentID }).map { $0 + 1 } ?? list.count
         list.insert(contentsOf: added, at: afterNow)
         for (index, plan) in list.enumerated() { plan.order = index }
         list.first { $0.id == change.currentID }?.durationMinutes = change.currentDurationMinutes

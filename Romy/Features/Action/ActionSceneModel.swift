@@ -5,6 +5,8 @@ import Observation
 final class ActionSceneModel {
     enum Phase: Equatable { case empty, searching, needsInput(SceneRequest.Issue), ready }
 
+    enum Refinement { case closer, others }
+
     let request: SceneRequest
     let routes: SceneRoutes
     private(set) var states: Set<ActionState>
@@ -15,6 +17,15 @@ final class ActionSceneModel {
     private(set) var searchFailed = false
     private(set) var routeFailed = false
     private(set) var usesPlanPlace = false
+    private(set) var note: String
+    private(set) var preferences = ScenePreferences()
+    private(set) var noteFailed = false
+    private(set) var isRefining = false
+    private(set) var refinementMessage: String?
+    private(set) var resultsVersion = 0
+    private(set) var hours: [String: SceneHours] = [:]
+    private(set) var checkingHours: Set<String> = []
+    private(set) var sessionID = UUID()
     var selectedID: String?
     /// How long the person means to spend, when nothing in the itinerary ends the time (「あと何時間すごす？」).
     var chosenMinutes = ActionSceneModel.defaultChosenMinutes
@@ -22,6 +33,12 @@ final class ActionSceneModel {
     static let chosenRange = 30...300
     @ObservationIgnored private let search: CandidateSearch
     @ObservationIgnored private let facts: LuggageFacts
+    @ObservationIgnored private let ai: SceneAI
+    @ObservationIgnored private var interpretation: Task<ScenePreferences?, Never>?
+    @ObservationIgnored private var interpretedNote: String?
+    @ObservationIgnored private var seenPlaces: Set<String> = []
+    @ObservationIgnored private var searchAICount = 0
+    @ObservationIgnored private var attemptedHours: Set<String> = []
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var generation = 0
 
@@ -30,12 +47,15 @@ final class ActionSceneModel {
         routes: SceneRoutes = SceneRoutes(),
         search: @escaping CandidateSearch = MapKitActionSearch.search,
         facts: LuggageFacts = .off,
+        ai: SceneAI = .live,
         now: @escaping () -> Date = Date.init
     ) {
         self.request = request
         self.routes = routes
         self.search = search
         self.facts = facts
+        self.ai = ai
+        note = request.note
         self.now = now
         states = request.states
         strength = request.strength
@@ -51,51 +71,166 @@ final class ActionSceneModel {
             if case .checked = option.luggage { return true }
             return false
         }
+        let availability = hours.values.contains { $0.status == "official" }
+            ? "ロッカーや席の空きは確認していません。営業時間は詳細の確認結果をご覧ください。"
+            : "ロッカーや席の空き・営業時間は確認していません。営業時間は詳細で確認できます。"
         return checked
-            ? "地図は徒歩経路。時間は目安です。宿の荷物預かりはAIが調べた公開情報です。ロッカーや席の空き・営業時間は確認していません。"
-            : "地図は徒歩経路。時間は目安です。荷物預かり・ロッカーや席の空き・営業時間は確認していません。"
+            ? "地図は徒歩経路。時間は目安です。宿の荷物預かりはAIが調べた公開情報です。" + availability
+            : "地図は徒歩経路。時間は目安です。荷物預かり・" + availability
     }
 
-    func edit(states: Set<ActionState>, strength: TiredStrength?) {
+    func edit(states: Set<ActionState>, strength: TiredStrength?, note: String? = nil) {
         self.states = states
         self.strength = strength
+        if let note, note != self.note {
+            self.note = note
+            // 一言を変更したときだけ新しいセッションにする。絞り直しではAIを呼び直さない。
+            sessionID = UUID()
+            interpretation?.cancel()
+            interpretation = nil
+            interpretedNote = nil
+            noteFailed = false
+            preferences = ScenePreferences()
+            searchAICount = 0
+            attemptedHours = []
+            checkingHours = []
+        }
+        seenPlaces = []
     }
 
-    func refresh(origin: ProposalPlace?, nowMinutes: Int, usesPlanPlace: Bool) async {
+    func removeCondition(at index: Int) {
+        let keys = [preferences.query != nil, preferences.walkMinutes != nil,
+                    preferences.restMinutes != nil, preferences.totalMinutes != nil]
+        let active = keys.indices.filter { keys[$0] }
+        guard active.indices.contains(index) else { return }
+        switch active[index] {
+        case 0: preferences.query = nil; preferences.category = nil
+        case 1: preferences.walkMinutes = nil
+        case 2: preferences.restMinutes = nil
+        default: preferences.totalMinutes = nil
+        }
+        seenPlaces = []
+    }
+
+    func refresh(origin: ProposalPlace?, nowMinutes: Int, usesPlanPlace: Bool,
+                 refinement: Refinement? = nil) async {
         generation += 1
         let mine = generation
-        selectedID = nil
-        ways = []
-        input = nil
+        let keepsResults = refinement != nil && !ways.isEmpty
+        isRefining = keepsResults
+        defer { if mine == generation { isRefining = false } }
+        refinementMessage = nil
+        if !keepsResults { selectedID = nil; ways = []; input = nil }
         searchFailed = false
         routeFailed = false
         self.usesPlanPlace = usesPlanPlace
-        guard !states.isEmpty else { phase = .empty; return }
+        guard !states.isEmpty || !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            phase = .empty; return
+        }
+        guard origin != nil else { phase = .needsInput(.needsLocation); return }
+        if interpretedNote != note, !note.isEmpty {
+            phase = .searching
+            let session = sessionID
+            if interpretation == nil {
+                let text = note
+                // 位置取得や条件変更でViewのtaskが作り直されても、同じ一言を二重送信しない。
+                interpretation = Task { await ai.interpret(text, session) }
+            }
+            let interpreted = await interpretation?.value
+            guard session == sessionID else { return }
+            if interpretedNote != note {
+                interpretedNote = note
+                noteFailed = interpreted?.isValid != true
+                preferences = interpreted.flatMap { $0.isValid ? $0 : nil } ?? ScenePreferences()
+            }
+            guard !Task.isCancelled, mine == generation else { return }
+        }
+        if states.isEmpty, preferences.captions.isEmpty {
+            phase = .empty; return
+        }
+        var effective = preferences
+        if refinement == .closer {
+            let current = ways.compactMap { $0.way.steps.first?.walkBeforeMinutes }.min() ?? 10
+            effective.walkMinutes = max(1, min(effective.walkMinutes ?? 30, current - 1))
+        }
         let updated = SceneRequest(
             id: request.id, plans: request.plans, states: states, strength: strength,
-            currentStartMinutes: request.currentStartMinutes
+            currentStartMinutes: request.currentStartMinutes, freeDay: request.freeDay,
+            searchDate: request.searchDate, note: note
         )
-        switch updated.input(origin: origin, nowMinutes: nowMinutes, chosenMinutes: chosenMinutes) {
-        case let .failure(issue): phase = .needsInput(issue)
-        case let .success(scene):
-            input = scene
-            phase = .searching
+        switch updated.input(origin: origin, nowMinutes: nowMinutes,
+                             chosenMinutes: effective.totalMinutes ?? chosenMinutes) {
+        case let .failure(issue):
+            if !keepsResults { phase = .needsInput(issue) }
+        case var .success(scene):
+            scene.preferences = effective
+            if !keepsResults { input = scene; phase = .searching }
             routes.retryUnavailable()
             let (known, asking) = luggage(for: scene)
+            let excluded = refinement == .others ? seenPlaces : []
             let run = SceneSearchRun(search: search, routes: routes)
             let result = await ActionScene.build(
-                scene, search: run.find, walking: run.walk, luggageCheck: { _ in known?.result ?? .unknown }
+                scene, search: { query in
+                    try await run.find(query).filter { !excluded.contains($0.scenePlaceKey) }
+                }, walking: run.walk, luggageCheck: { _ in known?.result ?? .unknown }
             )
             guard !Task.isCancelled, mine == generation else { return }
             searchFailed = run.searchFailed
             routeFailed = run.routeFailed
+            if keepsResults, result.isEmpty {
+                refinementMessage = searchFailed || routeFailed
+                    ? "調べられませんでした。表示中の案はそのままです。"
+                    : "条件に合う別の案は見つかりませんでした。"
+                phase = .ready
+                return
+            }
+            input = scene
+            preferences = effective
+            selectedID = nil
             ways = result.enumerated().map { index, way in
                 let mark: LuggageMark = !way.leavesLuggageAtStay ? .none
-                    : known.map { .checked($0) } ?? (asking != nil ? .checking : .none)
+                    : known.map { .checked($0) } ?? (asking != nil && refinement == nil ? .checking : .none)
                 return SceneOption(id: ActionProposalModel.letter(index), way: way, luggage: mark)
             }
+            for option in ways {
+                for step in option.way.steps where step.kind == .rest || step.kind == .eat {
+                    seenPlaces.insert(step.place.scenePlaceKey)
+                }
+            }
+            resultsVersion += 1
             phase = .ready
-            if let asking { await ask(asking, generation: mine) }
+            if let asking, refinement == nil { await ask(asking, generation: mine) }
+        }
+    }
+
+    /// 詳細を開いた店だけを確認する。取得中も順番・経路・選択中のカードは変えない。
+    func checkHours(for option: SceneOption) async {
+        let session = sessionID
+        for step in option.way.steps where step.kind == .rest || step.kind == .eat {
+            let key = step.place.scenePlaceKey
+            guard !Task.isCancelled, session == sessionID else { return }
+            if hours[key]?.isFresh(on: request.searchDate, at: now()) == true { continue }
+            guard !attemptedHours.contains(key), searchAICount < 3 else { continue }
+            attemptedHours.insert(key)
+            searchAICount += 1
+            checkingHours.insert(key)
+            let fact = await ai.hours(step.place, request.searchDate, session)
+            guard session == sessionID else { return }
+            checkingHours.remove(key)
+            guard !Task.isCancelled else { return }
+            if let fact, fact.isFresh(on: request.searchDate, at: now()) { hours[key] = fact }
+        }
+    }
+
+    func isCheckingHours(for option: SceneOption) -> Bool {
+        option.way.steps.contains { checkingHours.contains($0.place.scenePlaceKey) }
+    }
+
+    func hoursPermit(_ option: SceneOption) -> Bool {
+        option.way.steps.filter { $0.kind == .rest || $0.kind == .eat }.allSatisfy { step in
+            guard let fact = hours[step.place.scenePlaceKey],
+                  fact.isFresh(on: request.searchDate, at: now()) else { return true }
+            return fact.permits(step)
         }
     }
 
@@ -109,8 +244,9 @@ final class ActionSceneModel {
         let run = SceneSearchRun(search: search, routes: routes)
         routes.retryUnavailable()
         let found = await ActionCandidates.gather(
-            for: step.kind == .eat ? ActionScene.mealChip : ActionScene.seatChip,
-            near: origin, radiusMeters: ActionScene.searchRadius(for: input), search: run.find
+            for: ActionScene.seatChip(for: input),
+            near: origin, radiusMeters: ActionScene.searchRadius(for: input),
+            allowCategoryFallback: input.preferences.query == nil, search: run.find
         )
         var result = SceneAlternatives()
         var seen = Set(option.way.steps.map { $0.place.scenePlaceKey })
@@ -120,7 +256,7 @@ final class ActionSceneModel {
             stops[index] = ActionScene.Planned(step.kind, place.name, place)
             let reason = option.way.reason == .leastWalk ? SceneWay.Reason.otherSeat : option.way.reason
             guard let way = await ActionScene.timed(reason, stops, input: input, walking: run.walk),
-                  ActionScene.meetsWalkingLimits(way, strength: input.strength) else { continue }
+                  ActionScene.meetsWalkingLimits(way, strength: input.strength, walkLimit: input.preferences.walkMinutes) else { continue }
             result.choices.append(SceneReplacement(optionID: option.id, generation: basis, index: index,
                                                   original: step.place, place: place, way: way))
             if result.choices.count == ActionScene.waysShown { break }
@@ -164,7 +300,11 @@ final class ActionSceneModel {
     /// The answer changes only the mark (and the headline of a ✓) of the way it belongs to; the order stays
     /// while the person is looking (Figma 23 2版 02・03).
     private func ask(_ stay: ItineraryItemSnapshot, generation mine: Int) async {
-        let fact = await facts.check(stay)
+        guard searchAICount < 3 else { return }
+        searchAICount += 1
+        let fact: LuggageFact?
+        if let check = facts.inSession { fact = await check(stay, sessionID) }
+        else { fact = await facts.check(stay) }
         guard !Task.isCancelled, mine == generation else { return }
         if let fact { facts.save(stay.id, fact) }
         ways = ways.map { $0.answered(fact) }
@@ -266,6 +406,7 @@ struct LuggageFacts {
     var check: (ItineraryItemSnapshot) async -> LuggageFact?
     var save: (UUID, LuggageFact) -> Void
     var allowed: () -> Bool
+    var inSession: ((ItineraryItemSnapshot, UUID) async -> LuggageFact?)?
 
     static let off = LuggageFacts(stored: { _ in nil }, check: { _ in nil }, save: { _, _ in }, allowed: { false })
 }

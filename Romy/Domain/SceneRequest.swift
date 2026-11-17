@@ -8,6 +8,10 @@ struct SceneRequest: Identifiable {
     let strength: TiredStrength?
     /// When 今 started on the day's schedule; 「この内容で旅程に入れる」 ends it at the time of the search.
     var currentStartMinutes: Int?
+    /// 予定がない日も、架空の「今」の予定を作らずに検索する。
+    var freeDay: Int?
+    var searchDate: Date = .now
+    var note: String = ""
 
     /// The plans 今 may leave out, the stay among the plans ahead, and the fixed plan that ends the time.
     struct Ahead {
@@ -41,7 +45,7 @@ struct SceneRequest: Identifiable {
     /// even without a place (never skipped to fit a later one); otherwise the stay's check-in when it is known and
     /// still ahead; otherwise the length the person chose. A time is never guessed.
     func input(origin: ProposalPlace?, nowMinutes: Int, chosenMinutes: Int) -> Result<SceneInput, Issue> {
-        guard plans.contains(where: { $0.id == id }), let ahead = ahead(nowMinutes: nowMinutes) else {
+        guard let ahead = ahead(nowMinutes: nowMinutes) else {
             return .failure(.missingCurrent)
         }
         guard let origin else { return .failure(.needsLocation) }
@@ -69,6 +73,7 @@ struct SceneRequest: Identifiable {
     }
 
     func ahead(nowMinutes: Int) -> Ahead? {
+        if freeDay != nil { return Ahead(between: [], stay: nil, next: nil) }
         guard let index = plans.firstIndex(where: { $0.id == id }) else { return nil }
         let remaining = Array(plans.dropFirst(index + 1).filter { $0.doneAt == nil })
         let isStay: (ItineraryItemSnapshot) -> Bool = { $0.kindRaw == PlanKind.stay.rawValue }

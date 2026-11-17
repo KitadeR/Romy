@@ -34,7 +34,8 @@ enum ActionCandidates {
     }
 
     static func gather(
-        for chip: ProposalChip, near origin: ProposalPlace, radiusMeters: Double, search: CandidateSearch
+        for chip: ProposalChip, near origin: ProposalPlace, radiusMeters: Double,
+        allowCategoryFallback: Bool = true, search: CandidateSearch
     ) async -> Gathered {
         let span = WalkLimit.spanDegrees(radiusMeters: radiusMeters)
         let category = categoryWords[chip.category] != nil ? chip.category : nil
@@ -60,7 +61,8 @@ enum ActionCandidates {
         }
         let found = await run(chip.query, nil)
         if !found.isEmpty { return Gathered(places: found, retriedWith: nil, failed: false) }
-        guard let category, let word = categoryWords[category], word != chip.query, !failed else {
+        // 一言で指定した食べ物は、見つからなくても一般のカフェなどに読み替えない。
+        guard allowCategoryFallback, let category, let word = categoryWords[category], word != chip.query, !failed else {
             return Gathered(places: [], retriedWith: nil, failed: failed)
         }
         return Gathered(places: await run(word, category), retriedWith: word, failed: failed)

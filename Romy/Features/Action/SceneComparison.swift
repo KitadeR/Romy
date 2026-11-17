@@ -36,6 +36,7 @@ struct SceneComparison<Header: View, Footer: View>: View {
         }
         .background(Theme.base)
         .onAppear { cardID = currentID }
+        .onChange(of: model.resultsVersion) { cardID = currentID }
         .sensoryFeedback(.selection, trigger: selectionFeedback)
     }
 
