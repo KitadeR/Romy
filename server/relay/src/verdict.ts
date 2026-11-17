@@ -24,7 +24,10 @@ export function decideLuggage(
 ): Omit<CheckResult, "checkedAt"> {
   const sources = evidence(answer.evidence).filter((source) => searched(source.url, searchedUrls)).slice(0, 3);
   const foundName = text(answer.found_name);
-  const samePlace = answer.applies_to_this_hotel === "yes"
+  // 同じ宿かどうかは名前と住所の照合（コード）で決める。読み取りのモデルは公式の文があっても
+  // 「当てはまるか不明」と揺れるため（2026-11-17の評価）、はっきり「当てはまらない」と答えたときだけ外す。
+  // 抜粋は宿名を含むものに絞ってから読ませている（searchReader.pagesAbout）。
+  const samePlace = answer.applies_to_this_hotel !== "no"
     && sameName(place.name, foundName)
     && sameArea(place.address, text(answer.found_address));
   const trusted = samePlace && answer.conflicting !== true && sources.length > 0;

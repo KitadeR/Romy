@@ -80,7 +80,7 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
       ? await deps.interpret(intakeInstructions, request.text, intakeSchema)
       : await deps.search(hoursInstructions, JSON.stringify({
           name: request.name, address: request.address, date: request.date, timeZone: request.timeZone,
-        }), hoursSchema, `${request.name} ${request.address} 営業時間`);
+        }), hoursSchema, { query: `${request.name} ${request.address} 営業時間`, mention: request.name });
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
     if (!json) return { reason: "error" };

@@ -5,9 +5,15 @@ export interface SearchAnswer {
   costUSD?: number;
 }
 
-/// `query` is what to search for when it differs from the input given to the reader (Search API + Workers AI).
+/// For the Search API + Workers AI reader: `query` is what to search for, and `mention` is the place's name,
+/// which an excerpt must contain to be read at all.
+export interface SearchOptions {
+  query?: string;
+  mention?: string;
+}
+
 export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>,
-  query?: string) => Promise<SearchAnswer>;
+  options?: SearchOptions) => Promise<SearchAnswer>;
 
 const endpoint = "https://api.perplexity.ai/v1/agent";
 

@@ -1,0 +1,103 @@
+{
+ "note": "保存した検索結果（eval/luggage/search）からRomyが出すべき答え。2026-11-17に各宿の公式ページで確認。accept は許容する判定、never は出してはいけない判定。",
+ "cases": {
+  "granvia-kyoto": {
+   "accept": [
+    "official"
+   ],
+   "why": "公式「チェックイン前、チェックアウト後でもお荷物をお預かり」"
+  },
+  "keihan-kyoto-grande": {
+   "accept": [
+    "official"
+   ],
+   "why": "公式 施設案内「チェックイン前、チェックアウト後のお荷物預かり致します」"
+  },
+  "fav-lux-hida": {
+   "accept": [
+    "unknown"
+   ],
+   "locker": "yes",
+   "never": [
+    "official",
+    "contradicted"
+   ],
+   "why": "公式FAQ：フロントではなく館内の無料手荷物ロッカー。別の宿（FAV TAKAYAMA）のFAQ「預かりは行っておりません」を混ぜない"
+  },
+  "fav-takayama": {
+   "accept": [
+    "contradicted",
+    "unknown"
+   ],
+   "never": [
+    "official",
+    "introduced"
+   ],
+   "why": "公式FAQ（?hotel=takayama）「お荷物預かりは行っておりません」。ページに宿名の明記がなく、別の宿のPDF（ロッカーあり）も混ざる"
+  },
+  "kyoto-tower-hotel": {
+   "accept": [
+    "official"
+   ],
+   "why": "公式FAQ「チェックイン前、チェックアウト後ともフロントにて無料でお預かり」"
+  },
+  "daiwa-roynet-kyoto-ekimae": {
+   "accept": [
+    "unknown",
+    "introduced"
+   ],
+   "never": [
+    "official"
+   ],
+   "why": "公式には事前に宅配便で送った荷物の預かりしか書いていない（✓公式は不可）。予約サイト（Relux）の記載からの「紹介」は決まりどおり"
+  },
+  "mitsui-garden-kyoto-ekimae": {
+   "accept": [
+    "official"
+   ],
+   "why": "公式「お荷物のお預かりは通常通りご利用いただけます」・チェックイン前のバゲージサービス"
+  },
+  "miyako-city-kintetsu-kyoto": {
+   "accept": [
+    "official"
+   ],
+   "locker": "yes",
+   "why": "公式FAQ：宿泊者専用の無料コインロッカー、入らない荷物はフロントで預かり"
+  },
+  "rihga-royal-kyoto": {
+   "accept": [
+    "unknown",
+    "introduced"
+   ],
+   "never": [
+    "official"
+   ],
+   "why": "検索結果の公式ページに預かりの記載なし。予約サイトの記載からの「紹介」は決まりどおり"
+  },
+  "granvia-osaka": {
+   "accept": [
+    "official"
+   ],
+   "why": "公式「チェックイン前、チェックアウト後（当日のみ）に、お荷物をお預かり」"
+  },
+  "hankyu-respire-osaka": {
+   "accept": [
+    "unknown",
+    "introduced"
+   ],
+   "never": [
+    "official"
+   ],
+   "why": "検索結果に公式ページがない。紹介記事のみ"
+  },
+  "toyoko-kyoto-gojo-karasuma": {
+   "accept": [
+    "unknown"
+   ],
+   "never": [
+    "official"
+   ],
+   "why": "東横INN全体のFAQのみで、この宿の案内ではない（指示文の決まりで？）"
+  }
+ }
+}
