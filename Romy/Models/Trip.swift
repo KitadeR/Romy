@@ -113,3 +113,40 @@ enum TripDates: Hashable {
     case days(Int)
     case range(start: Date, end: Date)
 }
+
+extension Trip {
+    /// A full copy of the trip (「複製」 in すべての旅行): every plan with its photo, times, 済み and booking, every
+    /// 「行きたい」, the cover photo and the day start. Only the ids are new, and the name gets 「のコピー」.
+    /// It is listed just below the original and is not opened.
+    @discardableResult
+    func duplicate(existingNames: [String], in context: ModelContext) -> Trip {
+        let copy = Trip(name: Self.copyName(of: name, existingNames: existingNames), isNameAuto: false,
+                        destinations: destinations, dates: dates, now: createdAt)
+        copy.lastOpenedAt = lastOpenedAt.addingTimeInterval(-1)
+        copy.photo = photo
+        copy.dayStartMinutes = dayStartMinutes
+        context.insert(copy)
+        for item in items {
+            let plan = ItineraryItem.restored(from: item.snapshot())
+            plan.id = UUID()
+            context.insert(plan)
+            plan.trip = copy
+        }
+        for wish in wishes {
+            let place = WishPlace.restored(from: wish.snapshot())
+            place.id = UUID()
+            context.insert(place)
+            place.trip = copy
+        }
+        return copy
+    }
+
+    /// 「京都旅行のコピー」, then 「京都旅行のコピー2」… so the names stay apart.
+    static func copyName(of name: String, existingNames: [String]) -> String {
+        let base = "\(name)のコピー"
+        guard existingNames.contains(base) else { return base }
+        var number = 2
+        while existingNames.contains("\(base)\(number)") { number += 1 }
+        return "\(base)\(number)"
+    }
+}
