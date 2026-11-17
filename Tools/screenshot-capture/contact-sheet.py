@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 root = Path(__file__).resolve().parents[2]
-files = sorted((root / 'output/fenrir/screenshots').glob('*.png'))
+files = sorted((root / 'output/screenshots/screenshots').glob('*.png'))
 thumb_width = 330
 thumb_height = 717
 margin = 26
@@ -21,5 +21,5 @@ for index, file in enumerate(files):
     assert screenshot.size == (1320, 2868), (file.name, screenshot.size)
     screenshot.thumbnail((thumb_width, thumb_height), Image.Resampling.LANCZOS)
     canvas.paste(screenshot, (x, y + label_height))
-canvas.save(root / 'output/fenrir/overview.png')
-print(root / 'output/fenrir/overview.png')
+canvas.save(root / 'output/screenshots/overview.png')
+print(root / 'output/screenshots/overview.png')

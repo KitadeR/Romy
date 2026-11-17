@@ -2,7 +2,7 @@
 import MapKit
 import SwiftUI
 
-struct FenrirStoryMap: View {
+struct ScreenshotStoryMap: View {
     let screen: Int
     let selectedA: Bool
     private struct RouteRecord: Decodable {
@@ -11,7 +11,7 @@ struct FenrirStoryMap: View {
     }
 
     private var lines: [[CLLocationCoordinate2D]] {
-        guard let url = Bundle.main.url(forResource: "fenrir-routes", withExtension: "json"),
+        guard let url = Bundle.main.url(forResource: "screenshot-routes", withExtension: "json"),
               let data = try? Data(contentsOf: url), let routes = try? JSONDecoder().decode(
                   [RouteRecord].self,
                   from: data) else { return [] }
@@ -32,14 +32,14 @@ struct FenrirStoryMap: View {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, points in
                     MapPolyline(coordinates: points).stroke(index >= 3 ? .gray : Theme.ink, lineWidth: 4)
                 }
-                Annotation("京都駅前", coordinate: FenrirCapture.station, anchor: .bottom) { pin("S") }
-                Annotation("ホテル", coordinate: FenrirCapture.hotelPoint, anchor: .top) { pin("1") }
+                Annotation("京都駅前", coordinate: ScreenshotScene.station, anchor: .bottom) { pin("S") }
+                Annotation("ホテル", coordinate: ScreenshotScene.hotelPoint, anchor: .top) { pin("1") }
                     .annotationTitles(.hidden)
                 if screen == 5 || selectedA {
-                    Annotation("イノダコーヒ", coordinate: FenrirCapture.cafeAPoint) { pin("A") }
+                    Annotation("イノダコーヒ", coordinate: ScreenshotScene.cafeAPoint) { pin("A") }
                 }
                 if screen == 5 || !selectedA {
-                    Annotation("OGAWA COFFEE", coordinate: FenrirCapture.cafeBPoint) { pin("B") }
+                    Annotation("OGAWA COFFEE", coordinate: ScreenshotScene.cafeBPoint) { pin("B") }
                 }
             }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))

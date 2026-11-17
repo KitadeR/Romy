@@ -2,29 +2,29 @@
 import SwiftData
 import SwiftUI
 
-struct FenrirCaptureHost: View {
-    @State private var trip = FenrirCapture.trip()
+struct ScreenshotHost: View {
+    @State private var trip = ScreenshotScene.trip()
     @Environment(\.modelContext) private var context
 
     var body: some View {
         Group {
-            switch FenrirCapture.screen ?? 2 {
+            switch ScreenshotScene.screen ?? 2 {
             case 1:
-                TripCreationView(model: FenrirCapture.creation()) { _ in }
+                TripCreationView(model: ScreenshotScene.creation()) { _ in }
             case 4:
                 StateTilesSheet(
                     initial: [.tired, .heavyLuggage],
                     initialStrength: .little,
                     initiallyAskingStrength: true) { _, _ in }
             case 8:
-                FenrirCaptureAfterView()
+                ScreenshotAfterView()
             case 2, 3:
                 AppShell(
                     trip: trip,
-                    initialTab: FenrirCapture.screen == 3 ? .itinerary : .home,
-                    initialTravel: FenrirCapture.travel(for: trip))
+                    initialTab: ScreenshotScene.screen == 3 ? .itinerary : .home,
+                    initialTravel: ScreenshotScene.travel(for: trip))
             default:
-                FenrirStoryView(initialScreen: FenrirCapture.screen ?? 5)
+                ScreenshotStoryView(initialScreen: ScreenshotScene.screen ?? 5)
             }
         }
         .preferredColorScheme(.light)

@@ -4,10 +4,10 @@ import SwiftData
 import SwiftUI
 
 /// Submission photographs use an in-memory container. Never seeds or opens the person's saved trips.
-enum FenrirCapture {
+enum ScreenshotScene {
     static var screen: Int? {
         let args = ProcessInfo.processInfo.arguments
-        guard let index = args.firstIndex(of: "-fenrir-screen"), args.indices.contains(index + 1),
+        guard let index = args.firstIndex(of: "-screenshot-screen"), args.indices.contains(index + 1),
               let value = Int(args[index + 1]), (1 ... 8).contains(value) else { return nil }
         return value
     }
@@ -49,7 +49,7 @@ enum FenrirCapture {
             dates: .range(start: day, end: end),
             now: now)
         trip.dayStartMinutes = 810
-        if screen == 2, let url = Bundle.main.url(forResource: "fenrir-kyoto-cover", withExtension: "png") {
+        if screen == 2, let url = Bundle.main.url(forResource: "screenshot-kyoto-cover", withExtension: "png") {
             trip.photo = try? Data(contentsOf: url)
         }
         let arrival = item("京都駅に到着・駅周辺を散策", order: 0, point: station, kind: .sight, duration: 45)
@@ -66,10 +66,10 @@ enum FenrirCapture {
         stay.bookedAt = now
         let dinner = item("京都駅周辺で夕食", order: 3, point: station, kind: .food, duration: 60)
         dinner.fixedStartMinutes = 1020
-        arrival.photo = photo("fenrir-kyoto-station")
-        temple.photo = photo("fenrir-higashi-honganji")
-        stay.photo = photo("fenrir-granvia")
-        dinner.photo = photo("fenrir-dinner")
+        arrival.photo = photo("screenshot-kyoto-station")
+        temple.photo = photo("screenshot-higashi-honganji")
+        stay.photo = photo("screenshot-granvia")
+        dinner.photo = photo("screenshot-dinner")
         trip.items = [arrival, temple, stay, dinner]
         for item in trip.items {
             item.trip = trip
@@ -97,8 +97,8 @@ enum FenrirCapture {
         let (added, _) = trip.apply(change)
         trip.items.append(contentsOf: added)
         for item in added { item.trip = trip }
-        added.first?.photo = photo("fenrir-granvia")
-        added.last?.photo = photo("fenrir-cafe-a")
+        added.first?.photo = photo("screenshot-granvia")
+        added.last?.photo = photo("screenshot-cafe-a")
     }
 
     private static func photo(_ name: String) -> Data? {
