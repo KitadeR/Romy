@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 状態と任意の一言を選ぶ。送信内容の説明は、一言を初めて使うときだけ表示する。
+/// 状態と任意の一言を選ぶ。一言の入力欄は、端末内で解釈できる端末だけに表示する。
 struct StateTilesSheet: View {
     /// The tiles chosen from the Home card's chips.
     let initial: Set<ActionState>
