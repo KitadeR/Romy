@@ -2,6 +2,7 @@ import { parseScene, runScene } from "./scene";
 import { japanDay, runCheck } from "./check";
 import { isKind } from "./kinds";
 import { perplexity } from "./perplexity";
+import { searchAndRead, type Reader } from "./searchReader";
 import { D1Store } from "./store";
 import { tokenAllows } from "./token";
 import type { CheckRequest, CheckResponse } from "./types";
@@ -9,6 +10,8 @@ import type { CheckRequest, CheckResponse } from "./types";
 export interface Env {
   DB: D1Database;
   PERPLEXITY_API_KEY?: string;
+  /// Workers AI, which reads the Search API excerpts (free daily Neurons; Notion 04 2026-11-17).
+  AI: Reader;
   /// The app's passphrase on the published relay (a secret); unset on the Mac.
   APP_TOKEN?: string;
   DEVICE_DAILY_SEARCHES: string;
@@ -40,7 +43,7 @@ export default {
       if (!env.PERPLEXITY_API_KEY) return Response.json({ reason: "error" });
       const reply = await runScene(scene, device, {
         store, takeSession,
-        search: perplexity(env.PERPLEXITY_API_KEY, fetch, { retrySchema: false }),
+        search: searchAndRead(env.PERPLEXITY_API_KEY, env.AI),
         interpret: perplexity(env.PERPLEXITY_API_KEY, fetch, { intake: true, retrySchema: false }),
         limits: { deviceDaily: Number(env.DEVICE_DAILY_SEARCHES), globalUSD: Number(env.GLOBAL_DAILY_USD),
           reserveUSD: Number(env.RESERVE_USD) },
@@ -55,7 +58,7 @@ export default {
     const result: CheckResponse = env.PERPLEXITY_API_KEY
       ? await runCheck(body, device, {
           store, takeSession,
-          search: perplexity(env.PERPLEXITY_API_KEY, fetch, { retrySchema: !body.session }),
+          search: searchAndRead(env.PERPLEXITY_API_KEY, env.AI),
           limits: {
             deviceDaily: Number(env.DEVICE_DAILY_SEARCHES),
             globalUSD: Number(env.GLOBAL_DAILY_USD),

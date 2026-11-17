@@ -1,3 +1,4 @@
+import { isNeverOfficial } from "./official";
 import { japanDay, type Deps } from "./check";
 import { jsonIn, type SearchAI } from "./perplexity";
 import { normalize } from "./verdict";
@@ -79,7 +80,7 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
       ? await deps.interpret(intakeInstructions, request.text, intakeSchema)
       : await deps.search(hoursInstructions, JSON.stringify({
           name: request.name, address: request.address, date: request.date, timeZone: request.timeZone,
-        }), hoursSchema);
+        }), hoursSchema, `${request.name} ${request.address} 営業時間`);
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
     if (!json) return { reason: "error" };
@@ -136,7 +137,8 @@ export function decideHours(request: { name: string; address: string; date: stri
   const sources: Source[] = Array.isArray(body.sources) ? body.sources.flatMap(source => {
     if (!source || typeof source !== "object") return [];
     const item = source as Record<string, unknown>;
-    if (item.official !== true || typeof item.url !== "string" || !searchedUrls.includes(item.url)) return [];
+    if (item.official !== true || typeof item.url !== "string" || !searchedUrls.includes(item.url)
+        || isNeverOfficial(item.url)) return [];
     try { if (!["https:", "http:"].includes(new URL(item.url).protocol)) return []; } catch { return []; }
     return [{ url: item.url, official: true, title: typeof item.title === "string" ? item.title.slice(0, 100) : undefined }];
   }).slice(0, 3) : [];

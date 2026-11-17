@@ -5,7 +5,9 @@ export interface SearchAnswer {
   costUSD?: number;
 }
 
-export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>) => Promise<SearchAnswer>;
+/// `query` is what to search for when it differs from the input given to the reader (Search API + Workers AI).
+export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>,
+  query?: string) => Promise<SearchAnswer>;
 
 const endpoint = "https://api.perplexity.ai/v1/agent";
 

@@ -7,6 +7,8 @@ const DAY_MS = 86_400_000;
 export interface KindSpec {
   instructions: string;
   input(place: PlaceInput): string;
+  /// What to search for; the excerpts it returns are then read with `instructions`.
+  query(place: PlaceInput): string;
   schema: Record<string, unknown>;
   /// How long a result is used again. ✓・✗ last long; ？ and 紹介 are checked again soon.
   ttlMs: Record<Status, number>;
@@ -28,6 +30,7 @@ export const KINDS: Record<CheckKind, KindSpec> = {
       "evidence には実際に読んだページのURLだけを入れます。JSONだけで答えます。",
     ].join("\n"),
     input: (place) => [`宿の名前：${place.name}`, place.address ? `住所：${place.address}` : null].filter(Boolean).join("\n"),
+    query: (place) => [place.name, place.address, "チェックイン前 荷物 預かり"].filter(Boolean).join(" "),
     schema: {
       type: "object",
       properties: {

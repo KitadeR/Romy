@@ -1,3 +1,4 @@
+import { isNeverOfficial } from "./official";
 import type { CheckResult, PlaceInput, Source, Status } from "./types";
 
 /// What the search AI answered for 「チェックイン前の荷物預かり」, as asked in `KINDS`.
@@ -85,7 +86,8 @@ function evidence(value: unknown): Source[] {
     if (typeof item !== "object" || item === null) return [];
     const { url, title, official } = item as Record<string, unknown>;
     if (typeof url !== "string" || hostOf(url) === null) return [];
-    return [{ url, title: typeof title === "string" ? title.slice(0, 120) : undefined, official: official === true }];
+    return [{ url, title: typeof title === "string" ? title.slice(0, 120) : undefined,
+      official: official === true && !isNeverOfficial(url) }];
   });
 }
 

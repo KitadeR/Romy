@@ -52,7 +52,7 @@ export async function runCheck(request: CheckRequest, device: string, deps: Deps
       return nothing("limit");
     }
     spent = deps.limits.reserveUSD;
-    const answer = await deps.search(spec.instructions, spec.input(request.place), spec.schema);
+    const answer = await deps.search(spec.instructions, spec.input(request.place), spec.schema, spec.query(request.place));
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
     if (!json) {
