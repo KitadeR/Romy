@@ -18,6 +18,7 @@ export interface Deps {
   search: SearchAI;
   limits: Limits;
   now: () => Date;
+  takeSession?: (session: string) => Promise<boolean>;
 }
 
 const DAY_MS = 86_400_000;
@@ -44,8 +45,13 @@ export async function runCheck(request: CheckRequest, device: string, deps: Deps
   }
 
   const spec = KINDS[request.kind];
-  let spent = deps.limits.reserveUSD;
+  let spent = 0;
   try {
+    if (request.session && deps.takeSession && !await deps.takeSession(request.session)) {
+      await deps.store.giveBackSearch(device, day);
+      return nothing("limit");
+    }
+    spent = deps.limits.reserveUSD;
     const answer = await deps.search(spec.instructions, spec.input(request.place), spec.schema);
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
