@@ -17,8 +17,6 @@ struct StateTilesSheet: View {
     @State private var isAskingStrength = false
 
     @State private var note = ""
-    @State private var explainsNote = false
-    @AppStorage("romy.scene.noteConsent") private var noteConsent = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
@@ -52,12 +50,6 @@ struct StateTilesSheet: View {
             states = initial
             strength = initialStrength
             note = initialNote
-        }
-        .alert("一言を検索条件にする", isPresented: $explainsNote) {
-            Button("同意して探す") { noteConsent = true; submit() }
-            Button("キャンセル", role: .cancel) { }
-        } message: {
-            Text("入力した一言をRomyの中継サーバー経由でPerplexityとOpenAIへ送り、食べたいもの・歩く時間・使える時間を読み取ります。旅程全体や現在地は送りません。一言はRomyのサーバーに保存しません。")
         }
     }
 
@@ -104,19 +96,24 @@ struct StateTilesSheet: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(ActionState.allCases, id: \.self) { state in tile(state) }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("一言そえる（任意）").font(Theme.jp(14, .bold))
-                TextField("甘いもの、徒歩5分以内、30分休みたい", text: $note, axis: .vertical)
-                    .font(Theme.jp(14)).lineLimit(2...4)
-                    .padding(14)
-                    .background(Theme.fill, in: .rect(cornerRadius: 16))
-                    .onChange(of: note) { _, value in
-                        if value.count > 300 { note = String(value.prefix(300)) }
-                    }
-                Text("食べたいもの・歩ける時間・休む時間・全体の時間を指定できます。")
-                    .font(Theme.jp(12)).foregroundStyle(Theme.secondary)
-            }.padding(.top, 12)
+            // 一言は端末内で解釈できる端末だけで受け付ける。非対応端末では外部へ送らず、状態だけで探す。
+            if OnDeviceIntake.isAvailable { noteField }
         }
+    }
+
+    private var noteField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("一言そえる（任意）").font(Theme.jp(14, .bold))
+            TextField("甘いもの、徒歩5分以内、30分休みたい", text: $note, axis: .vertical)
+                .font(Theme.jp(14)).lineLimit(2...4)
+                .padding(14)
+                .background(Theme.fill, in: .rect(cornerRadius: 16))
+                .onChange(of: note) { _, value in
+                    if value.count > 300 { note = String(value.prefix(300)) }
+                }
+            Text("食べたいもの・歩ける時間・休む時間・全体の時間を指定できます。")
+                .font(Theme.jp(12)).foregroundStyle(Theme.secondary)
+        }.padding(.top, 12)
     }
 
     private func tile(_ state: ActionState) -> some View {
@@ -183,9 +180,8 @@ struct StateTilesSheet: View {
             if asksStrength {
                 isAskingStrength = true
             } else {
-                if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !noteConsent {
-                    explainsNote = true
-                } else { submit() }
+                // 一言は端末内だけで解釈し外へ送らないため、送信の同意は求めない。
+                submit()
             }
         } label: {
             Text(asksStrength ? "次へ" : "この内容で探す")

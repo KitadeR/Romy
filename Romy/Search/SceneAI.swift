@@ -1,12 +1,14 @@
 import Foundation
 
-/// 中継へ送る文と店舗情報を入口で分ける。位置情報や旅程全体は送信しない。
+/// 一言の解釈と営業時間の確認を入口で分ける。位置情報や旅程全体は送信しない。
 struct SceneAI {
     var interpret: (String, UUID) async -> ScenePreferences?
     var hours: (ProposalPlace, Date, UUID) async -> SceneHours?
     static let live = SceneAI(
-        interpret: { text, session in
-            await FactRelay.shared.scene(["operation": "interpret", "text": text], session: session)?.preferences
+        interpret: { text, _ in
+            // 一言は端末内のApple Intelligenceだけで解釈し、端末の外へ送らない。
+            // 非対応端末では一言の入力欄を出さないため、ここでは中継を使わない。
+            await OnDeviceIntake.interpret(text)
         },
         hours: { place, date, session in
             let formatter = DateFormatter()
