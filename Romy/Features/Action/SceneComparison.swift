@@ -5,6 +5,7 @@ struct SceneComparison<Header: View, Footer: View>: View {
     let model: ActionSceneModel
     let input: SceneInput
     @Binding var position: MapCameraPosition
+    let cardTransition: Namespace.ID
     let open: (String) -> Void
     @ViewBuilder let header: () -> Header
     @ViewBuilder let footer: () -> Footer
@@ -58,6 +59,8 @@ struct SceneComparison<Header: View, Footer: View>: View {
                             open(option.id)
                         }
                         .frame(width: max(1, width - (model.ways.count > 1 ? 64 : 32)))
+                        // 詳細から閉じると、選んでいた同じカードへ戻る。
+                        .matchedTransitionSource(id: option.id, in: cardTransition)
                         .id(option.id)
                     }
                 }

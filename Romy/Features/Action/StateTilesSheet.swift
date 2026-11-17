@@ -21,8 +21,22 @@ struct StateTilesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            if isAskingStrength { strengthPage } else { tilesPage }
-            Spacer(minLength: 0)
+            GeometryReader { _ in
+                // 進むと左へ、戻ると右へ。下の主ボタンは同じ位置に残す。
+                ZStack(alignment: .topLeading) {
+                    if isAskingStrength {
+                        strengthPage
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .transition(reduceMotion ? .identity : .move(edge: .trailing))
+                    } else {
+                        tilesPage
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .transition(reduceMotion ? .identity : .move(edge: .leading))
+                    }
+                }
+                .animation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0), value: isAskingStrength)
+                .clipped()
+            }
             mainButton
         }
         .padding(.horizontal, 20)
@@ -30,7 +44,6 @@ struct StateTilesSheet: View {
         .padding(.bottom, 8)
         .background(Theme.surface.ignoresSafeArea())
         .onAppear { states = initial; strength = initialStrength }
-        .animation(reduceMotion ? nil : .snappy, value: isAskingStrength)
     }
 
     private var header: some View {

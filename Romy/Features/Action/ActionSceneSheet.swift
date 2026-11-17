@@ -7,11 +7,10 @@ struct ActionSceneSheet: View {
     @Environment(LocationProvider.self) private var location
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Namespace private var cardTransition
     @State private var editStates = false
     @State private var fromPlan = false
     @State private var revision = 0
-    private enum Page: Hashable { case detail(String), preview(String) }
-    private struct StopSelection: Identifiable { let id: Int }
     @State private var path: [Page] = []
     @State private var position: MapCameraPosition = .automatic
     @State private var replacing: StopSelection?
@@ -37,15 +36,13 @@ struct ActionSceneSheet: View {
         }
     }
 
-    private var refreshKey: String {
-        "\(fromPlan || location.location != nil)-\(fromPlan)-\(revision)"
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             Group {
                 if let input = model.input, !model.ways.isEmpty {
-                    SceneComparison(model: model, input: input, position: $position) { id in
+                    SceneComparison(
+                        model: model, input: input, position: $position, cardTransition: cardTransition
+                    ) { id in
                         path.append(.detail(id))
                     } header: {
                         controls
@@ -151,6 +148,7 @@ struct ActionSceneSheet: View {
                         .controlSize(.large).tint(Theme.ink).disabled(option.isUnavailable)
                     }.padding(20)
                 }
+                .navigationTransition(.zoom(sourceID: id, in: cardTransition))
                 .navigationTitle("案の詳細").navigationBarTitleDisplayMode(.inline)
                 .sheet(item: $replacing) { stop in
                     SceneReplacementSheet(model: model, option: option, index: stop.id)
@@ -305,4 +303,14 @@ private struct ChosenLengthSlider: View {
         .padding(14)
         .background(Theme.base, in: .rect(cornerRadius: 16))
     }
+}
+
+// 画面の位置と、差し替え対象の立ち寄り先を区別して持つ。
+private extension ActionSceneSheet {
+    var refreshKey: String {
+        "\(fromPlan || location.location != nil)-\(fromPlan)-\(revision)"
+    }
+
+    enum Page: Hashable { case detail(String), preview(String) }
+    struct StopSelection: Identifiable { let id: Int }
 }
