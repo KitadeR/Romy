@@ -3,7 +3,7 @@ import MapKit
 import SwiftUI
 
 /// Deliberately authored display examples (5–7), separate from live candidate search and saved trips.
-struct FenrirStoryView: View {
+struct ScreenshotStoryView: View {
     let initialScreen: Int
     @State private var screen = 5
     @State private var selectedA = true
@@ -11,7 +11,7 @@ struct FenrirStoryView: View {
     var body: some View {
         Group {
             if screen == 8 {
-                FenrirCaptureAfterView()
+                ScreenshotAfterView()
             } else {
                 story
             }
@@ -22,7 +22,7 @@ struct FenrirStoryView: View {
     private var story: some View {
         GeometryReader { geometry in
             ZStack(alignment: .top) {
-                FenrirStoryMap(screen: screen, selectedA: selectedA)
+                ScreenshotStoryMap(screen: screen, selectedA: selectedA)
                     .frame(height: geometry.size.height * sheetFraction + geometry.safeAreaInsets.top)
                     .ignoresSafeArea(edges: .top)
                 VStack {
@@ -118,7 +118,7 @@ struct FenrirStoryView: View {
                     HStack(alignment: .top, spacing: 7) {
                         Text(isA ? "A" : "B").font(Theme.latin(12, .bold)).foregroundStyle(.white)
                             .frame(width: 23, height: 23).background(Theme.ink, in: .circle)
-                        Text(isA ? FenrirCapture.titleA : FenrirCapture.titleB)
+                        Text(isA ? ScreenshotScene.titleA : ScreenshotScene.titleB)
                             .font(Theme.jp(16, .bold)).fixedSize(horizontal: false, vertical: true)
                     }
                     Text(isA ? "ホテルに荷物を預ける → イノダコーヒ\nポルタ支店で休憩 → チェックイン"
@@ -141,10 +141,10 @@ struct FenrirStoryView: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: 13) {
-            Text(selectedA ? FenrirCapture.titleA : FenrirCapture.titleB).font(Theme.jp(19, .bold))
+            Text(selectedA ? ScreenshotScene.titleA : ScreenshotScene.titleB).font(Theme.jp(19, .bold))
             picture(isA: selectedA, verticalOffset: selectedA ? 12 : 0)
                 .frame(height: 104).clipShape(.rect(cornerRadius: 17))
-            Text(selectedA ? FenrirCapture.cafeA : FenrirCapture.cafeB)
+            Text(selectedA ? ScreenshotScene.cafeA : ScreenshotScene.cafeB)
                 .font(Theme.jp(13, .bold))
             HStack(spacing: 18) {
                 metric(selectedA ? "19分" : "11分", "徒歩の合計")
@@ -181,7 +181,7 @@ struct FenrirStoryView: View {
             fact(
                 "checkmark.circle",
                 selectedA ? "営業時間 8:00–21:00" : "営業時間 7:00–21:00",
-                "\(selectedA ? FenrirCapture.cafeA : FenrirCapture.cafeB) · 10/30確認",
+                "\(selectedA ? ScreenshotScene.cafeA : ScreenshotScene.cafeB) · 10/30確認",
                 url: selectedA ? "https://www.inoda-coffee.co.jp/shop/poruta/" :
                     "https://www.oc-ogawa.co.jp/shop/")
             Label("席の空き・当日の荷物受付は現地で確認", systemImage: "questionmark.circle")
@@ -195,13 +195,13 @@ struct FenrirStoryView: View {
             changeCard(
                 time: "14:05–14:15",
                 title: "ホテルに荷物を預ける",
-                subtitle: FenrirCapture.hotel,
+                subtitle: ScreenshotScene.hotel,
                 badge: "追加",
                 symbol: "suitcase")
             changeCard(
                 time: "14:22–15:00",
                 title: "カフェで休憩",
-                subtitle: FenrirCapture.cafeA,
+                subtitle: ScreenshotScene.cafeA,
                 badge: "追加",
                 symbol: "cup.and.saucer")
             Text("未定へ移す予定").font(Theme.jp(15, .bold))
@@ -215,7 +215,7 @@ struct FenrirStoryView: View {
             changeCard(
                 time: "15:07ごろ",
                 title: "チェックイン",
-                subtitle: "\(FenrirCapture.hotel) · 15:00以降",
+                subtitle: "\(ScreenshotScene.hotel) · 15:00以降",
                 badge: "維持",
                 symbol: "bed.double")
             changeCard(time: "17:00", title: "京都駅周辺で夕食", subtitle: "固定の時刻は動かしません", badge: "固定", symbol: "lock")
@@ -224,10 +224,10 @@ struct FenrirStoryView: View {
 
 }
 
-extension FenrirStoryView {
+extension ScreenshotStoryView {
     private func picture(isA: Bool, verticalOffset: CGFloat = 0) -> some View {
         Image(uiImage: UIImage(contentsOfFile: Bundle.main.path(
-            forResource: isA ? "fenrir-cafe-a" : "fenrir-cafe-b",
+            forResource: isA ? "screenshot-cafe-a" : "screenshot-cafe-b",
             ofType: "png") ?? "") ?? UIImage())
             .resizable().scaledToFill().offset(y: verticalOffset).clipped()
     }

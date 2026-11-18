@@ -3,12 +3,12 @@ import SwiftData
 import SwiftUI
 
 /// Screen 8 uses the current AppShell / ItineraryView with an applied, isolated trip.
-struct FenrirCaptureAfterView: View {
-    @State private var trip = FenrirCapture.trip(applyingA: true)
+struct ScreenshotAfterView: View {
+    @State private var trip = ScreenshotScene.trip(applyingA: true)
     @Environment(\.modelContext) private var context
 
     var body: some View {
-        AppShell(trip: trip, initialTab: .itinerary, initialTravel: FenrirCapture.travel(for: trip))
+        AppShell(trip: trip, initialTab: .itinerary, initialTravel: ScreenshotScene.travel(for: trip))
             .onAppear {
                 context.insert(trip)
                 recordVerification()
@@ -21,7 +21,7 @@ struct FenrirCaptureAfterView: View {
              "notBeforeMinutes": item.notBeforeMinutes as Any? ?? NSNull(),
              "durationMinutes": item.durationMinutes, "isDone": item.doneAt != nil]
         }
-        let url = URL.temporaryDirectory.appending(path: "fenrir-after-verification.json")
+        let url = URL.temporaryDirectory.appending(path: "screenshot-after-verification.json")
         if let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: url)
         }

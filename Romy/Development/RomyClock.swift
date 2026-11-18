@@ -4,8 +4,8 @@ import Foundation
 enum RomyClock {
     static func timelineDate(_ date: Date) -> Date {
         #if DEBUG
-        if FenrirCapture.screen != nil {
-            return FenrirCapture.now
+        if ScreenshotScene.screen != nil {
+            return ScreenshotScene.now
         }
         #endif
         return date
@@ -13,8 +13,8 @@ enum RomyClock {
 
     static var now: Date {
         #if DEBUG
-        if FenrirCapture.screen != nil {
-            return FenrirCapture.now
+        if ScreenshotScene.screen != nil {
+            return ScreenshotScene.now
         }
         #endif
         return .now

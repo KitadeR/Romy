@@ -8,7 +8,7 @@ import sys
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'output/fenrir/screenshots'
+OUT = ROOT / 'output/screenshots/screenshots'
 SIMULATOR = '587D7A86-D224-45A5-9A0D-741AF45DD4D0'
 BUNDLE = 'com.KitadeR.Romy'
 NAMES = ['01-create', '02-home', '03-before', '04-state', '05-compare', '06-detail-a', '07-preview', '08-after']
@@ -18,7 +18,7 @@ for number, name in enumerate(NAMES, 1):
     if number not in selected:
         continue
     subprocess.run(['xcodebuildmcp', 'simulator', 'stop', '--bundle-id', BUNDLE], cwd=ROOT, check=False, capture_output=True)
-    args = json.dumps({'bundleId': BUNDLE, 'launchArgs': ['-fenrir-screen', str(number)]})
+    args = json.dumps({'bundleId': BUNDLE, 'launchArgs': ['-screenshot-screen', str(number)]})
     subprocess.run(['xcodebuildmcp', 'simulator', 'launch-app', '--json', args], cwd=ROOT, check=True, capture_output=True)
     time.sleep(3)  # Map tiles / native sheets settle; this does not advance the frozen scenario clock.
     if number == 8:
