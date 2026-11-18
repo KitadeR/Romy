@@ -6,19 +6,29 @@ import SwiftData
 /// Only the stay's name and address go out, never where the person is or the itinerary (Notion 04
 /// 「2026-10-29｜各社のデータの扱い」①). Nil when nothing came back: offline, the caps, or no relay in this build.
 nonisolated struct FactRelay {
-    /// The Simulator asks the relay on this Mac (`wrangler dev`, no passphrase); an iPhone asks the published one
-    /// written in `Romy/Config/Relay.plist`, which is kept out of Git (Notion 04「2026-10-29｜段階3 公開」).
-    /// Without that file the iPhone does not check, as before.
+    /// Both Simulator and device use the published configuration. Only a Debug Simulator can explicitly
+    /// opt into the Mac's local relay, so ordinary runs do not depend on `wrangler dev` being started.
     static let shared: FactRelay = {
-        #if targetEnvironment(simulator)
-        FactRelay(baseURL: URL(string: "http://localhost:8787"))
-        #else
         let config = Bundle.main.url(forResource: "Relay", withExtension: "plist")
             .flatMap { try? Data(contentsOf: $0) }
             .flatMap(RelayConfig.decode)
-        return FactRelay(baseURL: config?.url, token: config?.token)
+        #if DEBUG && targetEnvironment(simulator)
+        let allowsLocal = true
+        #else
+        let allowsLocal = false
         #endif
+        return configured(published: config, arguments: ProcessInfo.processInfo.arguments, allowsLocal: allowsLocal)
     }()
+
+    static let localArgument = "-romy-relay-local"
+
+    /// Local development must be explicit and must never send the published app token to localhost.
+    static func configured(published: RelayConfig?, arguments: [String], allowsLocal: Bool) -> FactRelay {
+        if allowsLocal, arguments.contains(localArgument) {
+            return FactRelay(baseURL: URL(string: "http://localhost:8787"))
+        }
+        return FactRelay(baseURL: published?.url, token: published?.token)
+    }
 
     let baseURL: URL?
     /// The app's passphrase for the published relay; it only keeps casual callers out.

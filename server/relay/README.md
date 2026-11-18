@@ -14,6 +14,8 @@ npm run dev
 
 `PERPLEXITY_API_KEY` はGit管理外の `.dev.vars` に設定します。アプリ用の `APP_TOKEN` は公開環境のSecretで管理し、値をコミットしません。
 
+アプリは実機・Simulatorともに、通常は `Romy/Config/Relay.plist` の公開中継へ接続します。上記の `npm run dev` へ接続して開発する場合は、Debug版Simulatorの起動引数に `-romy-relay-local` を指定してください。このときだけ `http://localhost:8787` を使い、公開中継用のアプリトークンは送りません。実機・Release版ではこの引数は無効です。
+
 ## 検索と読み取り
 
 宿の荷物預かりと営業時間は、PerplexityのSearch APIで抜粋を集め、Workers AI（`@cf/google/gemma-4-26b-a4b-it`、`wrangler.toml` の `AI` バインディング）が読み取ります。宿名・店名を含まない抜粋は読ませず、同じ宿かどうかと公式かどうかの最終判断はコードで行います。検索は1回0.005ドルとして日次上限に数え、読み取りはWorkers AIの無料枠（1日1万Neuron）を使います。PerplexityのAgent APIは有料クレジットが必要なため使っていません（一言の解釈の入口だけ旧来のAgent APIのまま残り、アプリは端末内で解釈するため呼びません）。
