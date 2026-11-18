@@ -17,7 +17,9 @@ struct RomyApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ScreenshotScene.screen != nil {
+            if LoadingPreviewHost.isEnabled {
+                LoadingPreviewHost()
+            } else if ScreenshotScene.screen != nil {
                 ScreenshotHost()
                     .modelContainer(ScreenshotScene.container)
             } else {
