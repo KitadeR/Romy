@@ -98,8 +98,6 @@ xcodebuild test -project Romy.xcodeproj -scheme Romy \
   -only-testing:RomyTests CODE_SIGNING_ALLOWED=NO
 ```
 
-読み込み表示は、Debugビルドの起動引数に `-loading-preview` を指定すると、通信や旅行データの保存なしで確認できます。「取得中」「取得成功」「画像なし」を切り替え、候補・詳細の写真サイズと営業時間の表示を確認できます。シマーを止める場合は、Simulatorの設定で「アクセシビリティ → 動作 → 視差効果を減らす」を有効にします。
-
 中継サーバーは次のコマンドで確認できます。
 
 ```sh

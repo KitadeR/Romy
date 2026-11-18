@@ -39,16 +39,7 @@ enum PlacePhotos {
 struct LookAroundPicture: View {
     let place: ProposalPlace
     var height: CGFloat = 112
-    @State private var picture: LookAroundPictureModel
-
-    init(place: ProposalPlace, height: CGFloat = 112,
-         loadImage: @escaping LookAroundPictureModel.Loader = { place, size in
-             await PlacePhotos.lookAround(of: place, size: size)
-         }) {
-        self.place = place
-        self.height = height
-        _picture = State(initialValue: LookAroundPictureModel(loadImage: loadImage))
-    }
+    @State private var picture = LookAroundPictureModel()
 
     var body: some View {
         Group {
