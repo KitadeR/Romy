@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decideHours, parsePreferences, parseScene, runScene, type SceneDeps } from "../src/scene";
+import { normalize } from "../src/verdict";
 import { SearchPipelineError } from "../src/searchReader";
 import { MemoryStore } from "./memoryStore";
 const session = "781D55EC-250B-4C69-9B03-213BE189C6D6";
@@ -7,7 +8,10 @@ const now = new Date("2026-11-17T03:00:00Z");
 const url = "https://cafe.example.jp/kobe";
 const shop = { operation: "hours" as const, session, name: "神戸カフェ", address: "兵庫県神戸市中央区1-1",
   date: "2026-11-17", timeZone: "Asia/Tokyo" };
-const official = { ...shop, conflicting: false, closed: false, windows: [{ start: 600, end: 1200, lastOrder: 1140 }],
+const quote = "神戸カフェ 営業時間10:00〜20:00（LO19:00）。2026年11月17日は休業。";
+const pages = [{ url, title: shop.name, snippet: quote }];
+const official = { ...shop, conflicting: false, closed: false,
+  windows: [{ hoursID: "p1-w1", lastOrderID: "p1-lo1" }],
   sources: [{ url, title: "神戸店", official: true }] };
 function makeDeps(text = JSON.stringify(official)) {
   const store = new MemoryStore();
@@ -15,7 +19,7 @@ function makeDeps(text = JSON.stringify(official)) {
   const counts = new Map<string, number>();
   const deps: SceneDeps = {
     store, limits: { deviceDaily: 15, globalUSD: 0.5, reserveUSD: 0.02 }, now: () => now,
-    search: async () => { searches++; return { text, urls: [url], costUSD: 0.01 }; },
+    search: async () => { searches++; return { text, urls: [url], pages, costUSD: 0.01 }; },
     interpret: async () => { intakes++; return { text, urls: [], costUSD: 0.001 }; },
     takeSession: async (id, operation) => {
       const key = id + operation, count = counts.get(key) ?? 0;
@@ -43,15 +47,17 @@ describe("一言と営業時間の入力境界", () => {
 });
 describe("公式営業時間の判定", () => {
   it("同じ支店の公式ページと、翌日に続く営業区間・休業日を採用する", () => {
-    expect(decideHours(shop, official, [url], now).status).toBe("official");
-    expect(decideHours(shop, { ...official, windows: [{ start: 1080, end: 1560, lastOrder: 1500 }] }, [url], now).windows[0].end).toBe(1560);
-    expect(decideHours(shop, { ...official, closed: true, windows: [] }, [url], now).closed).toBe(true);
+    expect(decideHours(shop, official, [url], now, pages).status).toBe("official");
+    const overnight = "神戸カフェ 18:00〜翌2:00（LO翌1:00）";
+    expect(decideHours(shop, { ...official, windows: [{ hoursID: "p1-w1", lastOrderID: "p1-lo1" }] },
+      [url], now, [{ ...pages[0], snippet: overnight }]).windows[0].end).toBe(1560);
+    expect(decideHours(shop, { ...official, closed: true, windows: [], closureEvidence: { url, quote } }, [url], now, pages).closed).toBe(true);
   });
   it("別支店・別日・出典不一致・矛盾・不正時刻は未確認にとどめる", () => {
     for (const patch of [{ name: "大阪店" }, { address: "大阪市1-1" }, { date: "2026-11-18" },
       { conflicting: true }, { windows: [{ start: 1200, end: 600 }] },
       { windows: [{ start: 600, end: 1200, lastOrder: 1300 }] }, { closed: true }]) {
-      expect(decideHours(shop, { ...official, ...patch }, [url], now).status).toBe("unknown");
+      expect(decideHours(shop, { ...official, ...patch }, [url], now, pages).status).toBe("unknown");
     }
     expect(decideHours(shop, official, [], now).status).toBe("unknown");
   });
@@ -98,7 +104,7 @@ describe("営業時間の失敗診断", () => {
     [{ sources: [] }, "no_official_source"], [{ windows: [] }, "no_hours"],
     [{ windows: [{ start: 1200, end: 600 }] }, "invalid_hours"],
   ])("未確認の理由を区別する: %s", (patch, code) => {
-    const hours = decideHours(shop, { ...official, ...patch }, [url], now);
+    const hours = decideHours(shop, { ...official, ...patch }, [url], now, pages);
     expect(hours.status).toBe("unknown");
     expect(hours.diagnostic).toBe(code);
     expect(hours.windows).toEqual([]);
@@ -147,4 +153,19 @@ describe("営業時間の失敗診断", () => {
       expect(result).toMatchObject({ code: "internal_error", cached: false });
     } finally { log.mockRestore(); }
   });
+});
+
+
+it("原文照合前のキャッシュを再利用せず、原文や抜粋をアプリへ返さない", async () => {
+  const d = makeDeps();
+  const key = "hours:" + normalize(shop.name + "|" + shop.address) + "|" + shop.date + "|" + shop.timeZone;
+  await d.store.putCheck(key, "hours", { status: "official", conditions: [], locker: "unknown", sources: official.sources,
+    checkedAt: now.toISOString(), hours: { status: "official", date: shop.date, timeZone: shop.timeZone,
+      closed: false, sources: official.sources, checkedAt: now.toISOString(), windows: [{ start: 0, end: 1200 }] } }, now.getTime() + 3_600_000);
+  const reply = await runScene(shop, "deviceAAAA", d.deps);
+  expect(d.searches()).toBe(1);
+  expect(reply.hours?.windows).toEqual([{ start: 600, end: 1200, lastOrder: 1140 }]);
+  expect(JSON.stringify(reply)).not.toContain("hoursText");
+  expect(JSON.stringify(reply)).not.toContain("quote");
+  expect(JSON.stringify(reply)).not.toContain("snippet");
 });
