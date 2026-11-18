@@ -14,7 +14,10 @@ struct SceneAI {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd"
-            guard let address = place.address, !address.isEmpty else { return nil }
+            guard let address = place.address, !address.isEmpty else {
+                HoursDiagnostics.record(.missingAddress)
+                return nil
+            }
             return await FactRelay.shared.scene([
                 "operation": "hours", "name": place.name, "address": address,
                 "date": formatter.string(from: date), "timeZone": TimeZone.current.identifier
@@ -27,11 +30,20 @@ struct SceneAIReply: Decodable {
     let preferences: ScenePreferences?
     let hours: SceneHours?
     let reason: String?
+    let diagnostic: Diagnostic?
+
+    struct Diagnostic: Decodable {
+        let code: String
+    }
 }
 
 extension FactRelay {
     func scene(_ fields: [String: String], session sceneID: UUID) async -> SceneAIReply? {
-        guard let baseURL else { return nil }
+        let checkingHours = fields["operation"] == "hours"
+        guard let baseURL else {
+            if checkingHours { HoursDiagnostics.record(.missingConfig) }
+            return nil
+        }
         var body = fields
         body["session"] = sceneID.uuidString
         var request = URLRequest(url: baseURL.appending(path: "v1/scene"))
@@ -41,8 +53,23 @@ extension FactRelay {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(Self.deviceID, forHTTPHeaderField: "X-Romy-Device")
         if let token { request.setValue(token, forHTTPHeaderField: "X-Romy-Token") }
-        guard let (data, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return try? JSONDecoder().decode(SceneAIReply.self, from: data)
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+                if checkingHours { HoursDiagnostics.record(.httpRejected, httpStatus: (response as? HTTPURLResponse)?.statusCode ?? 0) }
+                return nil
+            }
+            guard let reply = try? JSONDecoder().decode(SceneAIReply.self, from: data) else {
+                if checkingHours { HoursDiagnostics.record(.responseInvalid) }
+                return nil
+            }
+            if checkingHours {
+                HoursDiagnostics.record(reply.diagnostic.flatMap { HoursDiagnostics.Code(rawValue: $0.code) } ?? .unknown)
+            }
+            return reply
+        } catch {
+            if checkingHours, !Task.isCancelled { HoursDiagnostics.record(.transportFailed) }
+            return nil
+        }
     }
 }

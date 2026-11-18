@@ -40,7 +40,13 @@ export default {
     if (url.pathname === "/v1/scene") {
       const scene = parseScene(value);
       if (!scene) return new Response("Bad request", { status: 400 });
-      if (!env.PERPLEXITY_API_KEY) return Response.json({ reason: "error" });
+      if (!env.PERPLEXITY_API_KEY) {
+        if (scene.operation === "hours") {
+          console.log(JSON.stringify({ event: "hours_result", code: "api_unconfigured", cached: false }));
+          return Response.json({ reason: "error", diagnostic: { code: "api_unconfigured" } });
+        }
+        return Response.json({ reason: "error" });
+      }
       const reply = await runScene(scene, device, {
         store, takeSession,
         search: searchAndRead(env.PERPLEXITY_API_KEY, env.AI),

@@ -210,7 +210,11 @@ final class ActionSceneModel {
             let key = step.place.scenePlaceKey
             guard !Task.isCancelled, session == sessionID else { return }
             if hours[key]?.isFresh(on: request.searchDate, at: now()) == true { continue }
-            guard !attemptedHours.contains(key), searchAICount < 3 else { continue }
+            guard !attemptedHours.contains(key) else { continue }
+            guard searchAICount < 3 else {
+                HoursDiagnostics.record(.clientSessionLimit)
+                continue
+            }
             attemptedHours.insert(key)
             searchAICount += 1
             checkingHours.insert(key)

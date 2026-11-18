@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decideHours, parsePreferences, parseScene, runScene, type SceneDeps } from "../src/scene";
+import { SearchPipelineError } from "../src/searchReader";
 import { MemoryStore } from "./memoryStore";
 const session = "781D55EC-250B-4C69-9B03-213BE189C6D6";
 const now = new Date("2026-11-17T03:00:00Z");
@@ -78,13 +79,72 @@ describe("検索と解釈の上限・保存", () => {
     expect(d.searches()).toBe(3); expect(d.store.usage.get("deviceAAAA|2026-11-17")).toBe(3);
     expect(d.store.spend.get("2026-11-17")?.reserved).toBe(0);
     d.store.spend.set("2026-11-17", { spent: 0.49, reserved: 0 });
-    expect(await runScene({ ...shop, session: crypto.randomUUID() }, "deviceAAAA", d.deps)).toEqual({ reason: "limit" });
+    expect(await runScene({ ...shop, session: crypto.randomUUID() }, "deviceAAAA", d.deps)).toEqual({ reason: "limit", diagnostic: { code: "budget_limit" } });
     expect(d.searches()).toBe(3);
   });
   it("通信失敗でも予約を解放し、不確かな情報を保存しない", async () => {
-    const d = makeDeps(); d.deps.search = async () => { throw new Error("timeout"); };
-    expect(await runScene(shop, "deviceAAAA", d.deps)).toEqual({ reason: "error" });
+    const d = makeDeps(); d.deps.search = async () => { throw new SearchPipelineError("search_failed"); };
+    expect(await runScene(shop, "deviceAAAA", d.deps)).toEqual({ reason: "error", diagnostic: { code: "search_failed" } });
     expect(d.store.checks.size).toBe(0);
     expect(d.store.spend.get("2026-11-17")).toEqual({ spent: 0.02, reserved: 0 });
+  });
+});
+
+
+describe("営業時間の失敗診断", () => {
+  it.each([
+    [{ name: "別の店" }, "name_mismatch"], [{ address: "別の住所" }, "address_mismatch"],
+    [{ date: "2026-11-18" }, "date_mismatch"], [{ conflicting: true }, "conflicting"],
+    [{ sources: [] }, "no_official_source"], [{ windows: [] }, "no_hours"],
+    [{ windows: [{ start: 1200, end: 600 }] }, "invalid_hours"],
+  ])("未確認の理由を区別する: %s", (patch, code) => {
+    const hours = decideHours(shop, { ...official, ...patch }, [url], now);
+    expect(hours.status).toBe("unknown");
+    expect(hours.diagnostic).toBe(code);
+    expect(hours.windows).toEqual([]);
+  });
+
+  it("検索未実行の上限を区別する", async () => {
+    const daily = makeDeps(); daily.deps.limits.deviceDaily = 0;
+    expect((await runScene(shop, "deviceAAAA", daily.deps)).diagnostic?.code).toBe("device_limit");
+    const session = makeDeps(); session.deps.takeSession = async () => false;
+    expect((await runScene(shop, "deviceAAAA", session.deps)).diagnostic?.code).toBe("session_limit");
+    expect(session.searches()).toBe(0);
+    expect(session.store.spend.get("2026-11-17")?.reserved).toBe(0);
+  });
+
+  it("古いキャッシュには不明、新しいキャッシュには保存時の判定理由を返す", async () => {
+    const d = makeDeps(JSON.stringify({ ...official, address: "別の住所" }));
+    const first = await runScene(shop, "deviceAAAA", d.deps);
+    expect(first.diagnostic?.code).toBe("address_mismatch");
+    const second = await runScene(shop, "deviceAAAA", d.deps);
+    expect(second.diagnostic).toEqual({ code: "address_mismatch", cached: true });
+    for (const row of d.store.checks.values()) delete row.result.hours!.diagnostic;
+    expect((await runScene(shop, "deviceAAAA", d.deps)).diagnostic).toEqual({ code: "cached_unknown", cached: true });
+    expect(d.searches()).toBe(1);
+  });
+
+  it.each(["search_empty", "place_not_matched", "reader_empty", "read"] as const)("読み取り前後の失敗を識別する: %s", async (code) => {
+    const d = makeDeps();
+    d.deps.search = async () => ({ text: "not json", urls: [], costUSD: 0.005,
+      diagnostic: { code, foundPages: 5, matchedPages: 2 } });
+    const reply = await runScene(shop, "deviceAAAA", d.deps);
+    expect(reply.diagnostic).toEqual({ code: code === "read" ? "reader_invalid_json" : code, foundPages: 5, matchedPages: 2 });
+    expect(d.store.checks.size).toBe(0);
+  });
+
+  it("ログには固定の理由と件数だけを残し、入力やAI応答の文字列を残さない", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const d = makeDeps();
+      d.deps.search = async () => { throw Object.assign(new Error("secret-provider-body"), { name: "secret-provider-name" }); };
+      await runScene(shop, "private-device", d.deps);
+      const messages = log.mock.calls.map(([value]) => String(value)).join("\n");
+      for (const value of [shop.name, shop.address, shop.session, "private-device", "secret-provider-body", "secret-provider-name", url]) {
+        expect(messages).not.toContain(value);
+      }
+      const result = log.mock.calls.map(([value]) => JSON.parse(String(value))).find(value => value.event === "hours_result");
+      expect(result).toMatchObject({ code: "internal_error", cached: false });
+    } finally { log.mockRestore(); }
   });
 });
