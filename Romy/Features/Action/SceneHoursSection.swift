@@ -9,14 +9,28 @@ struct SceneHoursSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("営業時間").font(Theme.jp(15, .bold))
+            HStack {
+                Text("営業時間").font(Theme.jp(15, .bold))
+                Spacer()
+                if model.isCheckingHours(for: option) {
+                    Text("確認中").font(Theme.jp(11)).foregroundStyle(Theme.actionSecondary)
+                }
+            }
             ForEach(option.way.steps.filter { $0.kind == .rest || $0.kind == .eat }, id: \.place.scenePlaceKey) { step in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(step.place.name).font(Theme.jp(14, .medium))
                     Text("\(DaySchedule.clock(step.startMinutes))到着 · \(DaySchedule.clock(step.leaveMinutes))出発")
                         .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
                     if model.checkingHours.contains(step.place.scenePlaceKey) {
-                        ProgressView("公式の案内を確認中").font(Theme.jp(12))
+                        VStack(alignment: .leading, spacing: 8) {
+                            SkeletonBar(width: 180, height: 13)
+                            SkeletonBar(width: 240, height: 11)
+                            Text("公式の案内を確認中")
+                                .font(Theme.jp(12)).foregroundStyle(Theme.actionSecondary)
+                        }
+                        .padding(.vertical, 4)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("営業時間、公式の案内を確認中")
                     } else if let fact = model.hours[step.place.scenePlaceKey],
                               fact.isFresh(on: model.request.searchDate, at: .now) {
                         Text(fact.caption(for: step)).font(Theme.jp(13, .medium))

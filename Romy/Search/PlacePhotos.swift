@@ -23,7 +23,8 @@ enum PlacePhotos {
             image = nil
         }
         guard !Task.isCancelled else { return nil }
-        lookArounds[key] = image
+        // The outer optional is the dictionary entry; keep an inner nil for places without imagery.
+        lookArounds[key] = .some(image)
         return image
     }
 
@@ -38,11 +39,19 @@ enum PlacePhotos {
 struct LookAroundPicture: View {
     let place: ProposalPlace
     var height: CGFloat = 112
-    @State private var image: UIImage?
+    @State private var picture = LookAroundPictureModel()
 
     var body: some View {
         Group {
-            if let image {
+            switch picture.phase(for: place) {
+            case .loading:
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Theme.rangeFill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .modifier(Shimmer())
+                    .accessibilityLabel("\(place.name)の周辺の写真を読み込み中")
+            case let .available(image):
                 // The picture fills a frame the card decides, so it never widens the card.
                 Color.clear
                     .frame(maxWidth: .infinity)
@@ -56,13 +65,13 @@ struct LookAroundPicture: View {
                             .padding(8)
                     }
                     .accessibilityLabel("\(place.name)の前の通りの写真（Look Around）")
-            } else {
-                // Takes no room, but is there so the picture is asked for (an empty view runs no task).
+            case .unavailable:
+                // A completed lookup without imagery must not leave an endless placeholder.
                 Color.clear.frame(height: 0)
             }
         }
-        .task(id: "\(place.latitude),\(place.longitude)") {
-            image = await PlacePhotos.lookAround(of: place, size: CGSize(width: 600, height: height * 2))
+        .task(id: LookAroundPictureModel.key(for: place)) {
+            await picture.load(place, size: CGSize(width: 600, height: height * 2))
         }
     }
 }
