@@ -52,8 +52,8 @@ struct ActionSceneSheet: View {
                         path.append(.detail(id))
                     } header: {
                         controls
-                    } footer: {
-                        contextFooter(input)
+                    } notice: {
+                        sceneNotices
                     }
                 } else {
                     ScrollView {
@@ -145,35 +145,31 @@ struct ActionSceneSheet: View {
             : labels.joined(separator: "・")
     }
 
-    private func contextFooter(_ input: SceneInput) -> some View {
-        VStack(spacing: 2) {
-            if model.isRefining { ProgressView("候補を絞り直しています") }
-            if let message = model.refinementMessage { Text(message) }
-            if model.noteFailed { Text("一言を読み取れませんでした。状態の条件で探しています。") }
+    /// What used to sit in a band under the cards, shown above them only while it applies.
+    @ViewBuilder private var sceneNotices: some View {
+        VStack(spacing: 6) {
+            if model.isRefining {
+                notice { HStack(spacing: 8) { ProgressView().controlSize(.mini); Text("候補を絞り直しています") } }
+            }
+            if let message = model.refinementMessage { notice { Text(message) } }
+            if model.noteFailed { notice { Text("一言を読み取れませんでした。状態の条件で探しています。") } }
             if !model.preferences.unhandled.isEmpty {
-                Text("未反映：" + model.preferences.unhandled.joined(separator: "・"))
+                notice { Text("未反映：" + model.preferences.unhandled.joined(separator: "・")) }
             }
-            if let total = model.preferences.totalMinutes {
-                Text("使える時間 " + DurationText.text(minutes: total) + "（移動を含む上限）")
-            } else if input.end == .chosen {
-                Button("すごす時間  \(DurationText.text(minutes: model.chosenMinutes))") { editingLength = true }
-                    .frame(minHeight: 44)
-                    .popover(isPresented: $editingLength) {
-                        ChosenLengthSlider(minutes: $model.chosenMinutes) {
-                            editingLength = false
-                            revision += 1
-                        }.padding().presentationCompactAdaptation(.popover)
-                    }
-            } else {
-                Text(caption(input)).multilineTextAlignment(.center)
-            }
-            if model.usesPlanPlace { Text("予定の場所から計算") }
+            if model.usesPlanPlace { notice { Text("予定の場所から計算") } }
             if model.searchFailed || model.routeFailed {
-                Button("一部の経路・場所を再検索") { revision += 1 }.frame(minHeight: 44)
+                Button("一部の経路・場所を再検索") { revision += 1 }
+                    .font(Theme.jp(12, .bold)).buttonStyle(.glass).frame(minHeight: 44)
             }
         }
-        .font(Theme.jp(12, .medium)).foregroundStyle(Theme.actionSecondary)
-        .padding(.horizontal, 16).padding(.vertical, 8)
+        .multilineTextAlignment(.center)
+    }
+
+    private func notice<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .font(Theme.jp(12, .bold)).foregroundStyle(Theme.ink)
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .glassEffect(.regular, in: .capsule)
     }
 
     @ViewBuilder private func destination(_ page: Page) -> some View {
@@ -340,12 +336,55 @@ private struct ChosenLengthSlider: View {
 // 画面の位置と、差し替え対象の立ち寄り先を区別して持つ。
 private extension ActionSceneSheet {
     var refinementControls: some View {
-        HStack(spacing: 8) {
-            Button("もっと近く", systemImage: "location") { refine(.closer) }
-            Button("ほかの候補", systemImage: "arrow.trianglehead.2.clockwise.rotate.90") { refine(.others) }
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Group {
+                    Button("もっと近く", systemImage: "location") { refine(.closer) }
+                    Button("ほかの候補", systemImage: "arrow.trianglehead.2.clockwise.rotate.90") { refine(.others) }
+                }
+                .disabled(model.isRefining)
+                if let input = model.input { timeChip(input) }
+            }
+            .font(Theme.jp(13, .medium)).buttonStyle(.glass).controlSize(.regular)
         }
-        .font(Theme.jp(13, .medium)).buttonStyle(.glass).controlSize(.regular)
-        .disabled(model.isRefining)
+        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
+    }
+
+    /// The time the ways fill, next to the refinements (it used to sit in the band under the cards).
+    @ViewBuilder func timeChip(_ input: SceneInput) -> some View {
+        if let total = model.preferences.totalMinutes {
+            timeLabel("上限 " + DurationText.text(minutes: total))
+                .accessibilityLabel("使える時間 " + DurationText.text(minutes: total) + "、移動を含む上限")
+        } else if input.end == .chosen {
+            Button(DurationText.text(minutes: model.chosenMinutes), systemImage: "clock") { editingLength = true }
+                .accessibilityLabel("すごす時間 " + DurationText.text(minutes: model.chosenMinutes))
+                .accessibilityHint("すごす時間を変える")
+                .popover(isPresented: $editingLength) {
+                    ChosenLengthSlider(minutes: $model.chosenMinutes) {
+                        editingLength = false
+                        revision += 1
+                    }.padding().presentationCompactAdaptation(.popover)
+                }
+        } else {
+            timeLabel(untilText(input)).accessibilityLabel(caption(input))
+        }
+    }
+
+    /// 「15:00 京都駅まで」: the short form of `caption`, for the chip.
+    func untilText(_ input: SceneInput) -> String {
+        switch input.end {
+        case let .plan(title, _): "\(DaySchedule.clock(input.endMinutes)) \(title)まで"
+        case .checkIn: "\(DaySchedule.clock(input.endMinutes)) \(input.stay?.title ?? "宿")まで"
+        case .chosen: DurationText.text(minutes: model.chosenMinutes)
+        }
+    }
+
+    func timeLabel(_ text: String) -> some View {
+        Label(text, systemImage: "clock")
+            .lineLimit(1)
+            .padding(.horizontal, 14).frame(minHeight: 36)
+            .glassEffect(.regular, in: .capsule)
     }
 
     @ViewBuilder var conditionChips: some View {
