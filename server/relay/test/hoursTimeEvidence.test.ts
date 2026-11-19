@@ -105,6 +105,12 @@ describe("休業の判定（分からなければ未確認）", () => {
   it.each(["2026/11/18は臨時休業", "2026-11-18(水)は店休日", "2026/11/08は休業"].map(text => [text]))("年つきの日付%sを読む", text => {
     expect(closure(text, text.includes("11/08") ? "2026-11-08" : request.date)).toBe("official");
   });
+  it("「'26」のような2桁の年を読み、「26/10」を月日と誤読しない", () => {
+    expect(closure("臨時:'26/10/19(月)・'26/10/20(火) 休業", "2026-10-20")).toBe("official");
+    expect(closure("臨時：’26/11/18(水) 休業")).toBe("official");
+    expect(closure("臨時:'25/11/18(火) 休業")).toBe("unknown");
+    expect(closure("26/11/18は休業")).toBe("unknown");
+  });
   it("日付の一部だけの一致では休業にしない", () => {
     expect(closure("2026/11/18は休業します", "2026-11-01")).toBe("unknown");
     expect(closure("2027/1/20は休業", "2027-01-02")).toBe("unknown");

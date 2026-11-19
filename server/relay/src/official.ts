@@ -7,6 +7,10 @@ const notOfficialHosts = [
   "knt.co.jp", "jtb.co.jp", "ana.co.jp", "jal.co.jp", "travel.yahoo.co.jp", "newt.net", "relux.jp",
   "yukoyuko.net", "tabelog.com", "retty.me", "hotpepper.jp", "gnavi.co.jp", "google.com", "instagram.com",
   "x.com", "twitter.com", "facebook.com", "kyoto-kankou.or.jp",
+  // 個人ブログ・地図・まとめ記事（2026-11-19：note.comのブログやナビタイムが公式と判定された）。
+  "note.com", "ameblo.jp", "hatenablog.com", "hatenablog.jp", "hatena.ne.jp", "navitime.co.jp", "mapion.co.jp",
+  "map.yahoo.co.jp", "loco.yahoo.co.jp", "rurubu.jp", "co-trip.jp", "icotto.jp", "kinarino.jp", "aumo.jp",
+  "walkerplus.com", "gltjp.com", "hitosara.com", "ekiten.jp", "epark.jp", "macaro-ni.jp", "timeout.jp", "ozmall.co.jp",
 ];
 
 /// True when the URL belongs to one of the sites above (or a subdomain such as yado.knt.co.jp).
