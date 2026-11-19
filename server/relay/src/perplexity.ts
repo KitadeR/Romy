@@ -1,7 +1,10 @@
+import type { Page } from "./searchReader";
+
 /// One search with the search AI: the text it wrote, the pages its search returned, and what it cost.
 export interface SearchAnswer {
   text: string;
   urls: string[];
+  pages?: Page[];
   costUSD?: number;
   diagnostic?: { code: "read" | "search_empty" | "place_not_matched" | "reader_empty"; foundPages: number; matchedPages: number };
 }
@@ -11,6 +14,7 @@ export interface SearchAnswer {
 export interface SearchOptions {
   query?: string;
   mention?: string;
+  hoursEvidence?: boolean;
 }
 
 export type SearchAI = (instructions: string, input: string, schema: Record<string, unknown>,

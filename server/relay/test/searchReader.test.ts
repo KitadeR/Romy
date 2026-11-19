@@ -40,6 +40,7 @@ describe("searchAndRead", () => {
     expect(answer).toEqual({
       text: "{\"front_desk\":\"yes\"}",
       urls: ["https://hotel-kyoto.example.jp/service", "https://travel.rakuten.co.jp/HOTEL/1/1.html"],
+      pages: pages.results,
       costUSD: SEARCH_COST_USD,
       diagnostic: { code: "read", foundPages: 2, matchedPages: 2 },
     });
@@ -113,4 +114,16 @@ describe("isNeverOfficial", () => {
     expect(decided.status).toBe("introduced");
     expect(decided.sources[0].official).toBe(false);
   });
+});
+
+
+it("営業時間だけ抜粋に候補idを埋め込み、判定には元の抜粋を使う", async () => {
+  const page = { url: "https://cafe.example.jp/shop", title: "駅前喫茶", snippet: "駅前喫茶 営業時間7:00〜21:00 LO20:30" };
+  const read = fakeReader({ response: "{}" });
+  const answer = await searchAndRead("key", read.reader, fakeSearch({ results: [page] }).send)("指示", "対象店舗", {},
+    { mention: "駅前喫茶", hoursEvidence: true });
+  const user = (read.calls[0].input.messages as { content: string }[])[1].content;
+  expect(user).toContain("駅前喫茶 営業時間[p1-w1]7:00〜21:00 LO20:30");
+  expect(user).not.toContain("p1-lo1");
+  expect(answer.pages).toEqual([page]);
 });

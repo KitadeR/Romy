@@ -16,12 +16,14 @@ node --env-file=.dev.vars eval/hours/run.mjs capture
 npx wrangler dev -c eval/wrangler.toml --port 8797 --ip 127.0.0.1
 
 # 同じ抜粋を本番の指示文・schema・店名フィルター・判定に通します。1〜3回を指定できます。
-node eval/hours/run.mjs score 1
+node eval/hours/run.mjs score 3 after
 ```
 
 初回の検索は12リクエストです。検索費用とWorkers AIの利用枠を消費します。評価WorkerはD1・本番のキャッシュ・日次上限・セッション上限を使わないため、上限と通信はサーバー・アプリの診断ログで別に確認します。検索を更新する場合は `search/` の対象ファイルを別の場所に保存してから削除し、captureを再実行してください。
 
-`search/` と `results/` はGit管理外です。他社の検索抜粋、モデルの出力、店舗の詳細を公開リポジトリに含めません。`results/latest.json` は上書きされるので、改善前後を比較するときは別名で保存します。比較には同じ検索結果・対象日・実行回数を使い、検索語自体の改善を測るときは検索取得から別途比較します。
+`search/` と `results/` はGit管理外です。他社の検索抜粋、モデルの出力、店舗の詳細を公開リポジトリに含めません。実行の第3引数はレポート名で、上の例は `results/after.json` に保存します（省略時は `results/latest.json`）。通信失敗で中断した場合も、完了した行と `complete: false` を保存します。未完了の結果を全件の評価として扱わないでください。
+
+`ROMY_HOURS_EVAL_URL` で比較用の別ローカルWorkerを指定でき、接続先はlocalhostに限定しています。`ROMY_HOURS_EVAL_CASES=inoda-main,ogawa-central` のように公開ケースIDを指定すると、原因調査に必要な店舗だけを再実行できます。限定した結果は12件全体の評価に含めません。比較には同じ検索結果・対象日・実行回数を使い、検索語自体の改善を測るときは検索取得から別途比較します。
 
 ## 集計の読み方
 
@@ -34,3 +36,9 @@ node eval/hours/run.mjs score 1
 - `source_review_needed`：時間は一致したが記録済みと違うドメインを出典にした。公式か人が確認します。
 
 `baseline-2026-11-18.md` に初回の集計と次の調査点をまとめています。モデル応答には揺れがあり、1回だけの結果を改善効果と断定しません。
+
+時刻の原文照合方式の各3回比較は [time-validation-2026-11-18.md](time-validation-2026-11-18.md) に記録しています。確認済み出力の増加と、通常案内との一致・不一致を分けて比較してください。
+
+## 確認用の店
+
+`cases.json` の12件は方式の調整に使ったため、改善の確認には別の8件 `holdout.json`（定休日・臨時休業・深夜営業・支店一覧・昼夜の営業とLO・京都以外）を使います。`ROMY_HOURS_EVAL_FILE=holdout` を付けて capture・score を実行します。この8件の結果を見ながら判定を調整せず、調整した場合はそのことを記録します。休業が正解のケースは `reference.closed: true` とし、休業と確認できた場合だけ一致とします。結果は [holdout-2026-11-19.md](holdout-2026-11-19.md) に記録しています。

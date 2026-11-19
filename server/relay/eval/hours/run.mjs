@@ -3,9 +3,20 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { assess } from "./assessment.mjs";
 
 const base = new URL("./", import.meta.url);
-const cases = JSON.parse(await readFile(new URL("cases.json", base), "utf8"));
-const [mode, runArg = "1"] = process.argv.slice(2);
-if (!["capture", "score"].includes(mode)) throw new Error("Use: node eval/hours/run.mjs capture|score [runs:1-3]");
+// ROMY_HOURS_EVAL_FILE=holdout で、方式の調整に使わない確認用の店（holdout.json）を評価する。
+const caseFile = process.env.ROMY_HOURS_EVAL_FILE ?? "cases";
+if (!["cases", "holdout"].includes(caseFile)) throw new Error("Unknown case file");
+let cases = JSON.parse(await readFile(new URL(`${caseFile}.json`, base), "utf8"));
+const selected = process.env.ROMY_HOURS_EVAL_CASES?.split(",");
+if (selected) {
+  if (selected.some(id => !cases.some(item => item.id === id))) throw new Error("Unknown evaluation case");
+  cases = cases.filter(item => selected.includes(item.id));
+}
+const [mode, runArg = "1", reportName = "latest"] = process.argv.slice(2);
+if (!/^[a-z0-9-]{1,40}$/.test(reportName)) throw new Error("Invalid report name");
+const endpoint = new URL(process.env.ROMY_HOURS_EVAL_URL ?? "http://127.0.0.1:8797/hours");
+if (endpoint.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(endpoint.hostname)) throw new Error("Evaluator must run on localhost");
+if (!["capture", "score"].includes(mode)) throw new Error("Use: node eval/hours/run.mjs capture|score [runs:1-3] [report-name]");
 const runs = Number(runArg);
 if (!Number.isInteger(runs) || runs < 1 || runs > 3) throw new Error("runs must be 1-3");
 if (cases.length > 15) throw new Error("Review the evaluation budget before adding more than 15 cases");
@@ -36,28 +47,31 @@ if (mode === "capture") {
   }
 } else {
   const rows = [];
-  for (const item of cases) {
-    const capture = await readJSON(new URL(`search/${item.id}.json`, base));
-    for (let run = 1; run <= runs; run++) {
-      const started = Date.now();
-      const response = await fetch("http://localhost:8797/hours", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request: { ...item.request, session: "781D55EC-250B-4C69-9B03-213BE189C6D6" }, pages: capture.results }),
-        signal: AbortSignal.timeout(70_000),
-      });
-      if (!response.ok) throw new Error(`${item.id}: evaluator HTTP ${response.status}`);
-      const reply = await response.json();
-      const row = { id: item.id, run, captureDate: capture.capturedAt, searchMs: capture.searchMs,
-        readerMs: Date.now() - started, assessment: assess(item.reference, reply), ...reply };
-      rows.push(row);
-      console.log(`${item.id} #${run}: ${reply.diagnostic?.code} ${row.assessment} (${reply.diagnostic?.matchedPages}/${reply.diagnostic?.foundPages} pages)`);
+  try {
+    for (const item of cases) {
+      const capture = await readJSON(new URL(`search/${item.id}.json`, base));
+      for (let run = 1; run <= runs; run++) {
+        const started = Date.now();
+        const response = await fetch(endpoint, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request: { ...item.request, session: "781D55EC-250B-4C69-9B03-213BE189C6D6" }, pages: capture.results }),
+          signal: AbortSignal.timeout(70_000),
+        });
+        if (!response.ok) throw new Error(`${item.id}: evaluator HTTP ${response.status}`);
+        const reply = await response.json();
+        const row = { id: item.id, run, captureDate: capture.capturedAt, searchMs: capture.searchMs,
+          readerMs: Date.now() - started, assessment: assess(item.reference, reply), ...reply };
+        rows.push(row);
+        console.log(`${item.id} #${run}: ${reply.diagnostic?.code} ${row.assessment} (${reply.diagnostic?.matchedPages}/${reply.diagnostic?.foundPages} pages)`);
+      }
     }
+  } finally {
+    const counts = {};
+    for (const row of rows) counts[row.assessment] = (counts[row.assessment] ?? 0) + 1;
+    const confirmed = rows.filter(row => row.hours?.status === "official").length;
+    const report = { complete: rows.length === cases.length * runs, evaluatedAt: new Date().toISOString(), runs, cases: cases.length, confirmed, total: rows.length, counts, rows };
+    await mkdir(new URL("results/", base), { recursive: true });
+    await writeFile(new URL(`results/${reportName}.json`, base), JSON.stringify(report, null, 2) + "\n");
+    console.log(JSON.stringify({ confirmed, total: rows.length, counts }));
   }
-  const counts = {};
-  for (const row of rows) counts[row.assessment] = (counts[row.assessment] ?? 0) + 1;
-  const confirmed = rows.filter(row => row.hours?.status === "official").length;
-  const report = { evaluatedAt: new Date().toISOString(), runs, cases: cases.length, confirmed, total: rows.length, counts, rows };
-  await mkdir(new URL("results/", base), { recursive: true });
-  await writeFile(new URL("results/latest.json", base), JSON.stringify(report, null, 2) + "\n");
-  console.log(JSON.stringify({ confirmed, total: rows.length, counts }));
 }

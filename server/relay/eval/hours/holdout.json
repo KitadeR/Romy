@@ -1,0 +1,196 @@
+[
+  {
+    "id": "maeda-kodaiji",
+    "request": {
+      "operation": "hours",
+      "name": "前田珈琲 高台寺店",
+      "address": "京都市東山区下河原通八坂鳥居前下る南町415",
+      "date": "2026-11-30",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.maedacoffee.com/shopinfo/koudaiji/",
+        "https://www.maedacoffee.com/shop/"
+      ],
+      "closed": true,
+      "windows": [],
+      "expectation": "regular_reference",
+      "category": "定休日・支店一覧",
+      "note": "「月曜日定休」。対象日は祝日でない月曜。支店一覧ページもある。"
+    }
+  },
+  {
+    "id": "maeda-bunpaku",
+    "request": {
+      "operation": "hours",
+      "name": "前田珈琲 文博店",
+      "address": "京都市中京区高倉通三条上る東片町623-1 京都文化博物館別館内1F",
+      "date": "2026-11-30",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.maedacoffee.com/shopinfo/bunpaku/",
+        "https://www.maedacoffee.com/shop/"
+      ],
+      "closed": true,
+      "windows": [],
+      "expectation": "regular_reference",
+      "category": "定休日（祝日の例外つき）",
+      "note": "「月曜日(月曜祝日の場合は翌日定休)」。対象日は祝日でない月曜なので正解は休業。祝日に触れる案内は未確認にする方針のため、未確認になるのが想定どおり。"
+    }
+  },
+  {
+    "id": "maeda-honten",
+    "request": {
+      "operation": "hours",
+      "name": "前田珈琲 室町本店",
+      "address": "京都市中京区蛸薬師通烏丸西入る橋弁慶町236",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.maedacoffee.com/shopinfo/honten/",
+        "https://www.maedacoffee.com/shop/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1080,
+          "lastOrder": 1050
+        }
+      ],
+      "expectation": "regular_reference",
+      "category": "支店一覧・LO",
+      "note": "「7:00~18:00(LO17:30)」「1/1休み」。支店一覧ページに他店の時間も並ぶ。"
+    }
+  },
+  {
+    "id": "tenkaippin-sohonten",
+    "request": {
+      "operation": "hours",
+      "name": "天下一品 総本店",
+      "address": "京都府京都市左京区一乗寺築田町94 メゾン白川1F",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.tenkaippin.co.jp/shop/728/"
+      ],
+      "windows": [
+        {
+          "start": 660,
+          "end": 1500
+        }
+      ],
+      "expectation": "regular_reference",
+      "category": "深夜営業",
+      "note": "「11:00～翌1:00」「(OS 閉店15分前)」。LOは時刻で書かれていないため照合しない。定休日は元日。"
+    }
+  },
+  {
+    "id": "tenkaippin-closure",
+    "request": {
+      "operation": "hours",
+      "name": "天下一品 総本店",
+      "address": "京都府京都市左京区一乗寺築田町94 メゾン白川1F",
+      "date": "2026-10-19",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.tenkaippin.co.jp/shop/728/"
+      ],
+      "closed": true,
+      "windows": [],
+      "expectation": "regular_reference",
+      "category": "臨時休業（年が2桁）",
+      "note": "「臨時：'26/10/19(月)・'26/10/20(火)　休業」。年は'26の2桁表記、曜日つき。"
+    }
+  },
+  {
+    "id": "tohka-weekday",
+    "request": {
+      "operation": "hours",
+      "name": "東華菜館 本店",
+      "address": "京都市下京区四条大橋西詰",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.tohkasaikan.com/main/shopinfo.html"
+      ],
+      "windows": [
+        {
+          "start": 690,
+          "end": 900,
+          "lastOrder": 870
+        },
+        {
+          "start": 1020,
+          "end": 1290,
+          "lastOrder": 1260
+        }
+      ],
+      "expectation": "regular_reference",
+      "category": "昼夜の営業・LO",
+      "note": "平日「11:30～15:00(ラストオーダー14:30)」「17:00～21:30(ラストオーダー21:00)」、土日祝は「11:30～21:30」。対象日は休業日の一覧にない水曜。"
+    }
+  },
+  {
+    "id": "tohka-closure",
+    "request": {
+      "operation": "hours",
+      "name": "東華菜館 本店",
+      "address": "京都市下京区四条大橋西詰",
+      "date": "2026-12-01",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://www.tohkasaikan.com/"
+      ],
+      "closed": true,
+      "windows": [],
+      "expectation": "regular_reference",
+      "category": "臨時休業（年なし・曜日つき）",
+      "note": "トップページの本店の休業日一覧「12/1（火）、8(火）、15(火）…」。年なし・曜日つき。「週1日 不定休」。"
+    }
+  },
+  {
+    "id": "marufuku-sennichimae",
+    "request": {
+      "operation": "hours",
+      "name": "丸福珈琲店 千日前本店",
+      "address": "大阪市中央区千日前1-9-1",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-19",
+      "sources": [
+        "https://marufukucoffeeten.com/store/marufukucoffee-sennichimae"
+      ],
+      "windows": [
+        {
+          "start": 480,
+          "end": 1380
+        }
+      ],
+      "expectation": "regular_reference",
+      "category": "京都以外・通常",
+      "note": "「8:00～23:00」。LO・定休日の記載なし。"
+    }
+  }
+]

@@ -1,3 +1,4 @@
+import { hoursReaderInput } from "./hoursEvidence";
 import type { SearchAI } from "./perplexity";
 import { normalize } from "./verdict";
 
@@ -32,12 +33,13 @@ export function searchAndRead(key: string, reader: Reader, send: typeof fetch = 
     catch (error) { throw new SearchPipelineError("search_failed", error); }
     const pages = options.mention ? pagesAbout(found, options.mention) : found;
     const counts = { foundPages: found.length, matchedPages: pages.length };
-    if (pages.length === 0) return { text: "", urls: [], costUSD: SEARCH_COST_USD,
+    if (pages.length === 0) return { text: "", urls: [], pages: [], costUSD: SEARCH_COST_USD,
       diagnostic: { ...counts, code: found.length ? "place_not_matched" : "search_empty" } };
     let text: string;
-    try { text = await readExcerpts(reader, instructions, input, schema, pages); }
+    const read = options.hoursEvidence ? hoursReaderInput(input, pages) : { input, pages };
+    try { text = await readExcerpts(reader, instructions, read.input, schema, read.pages); }
     catch { throw new SearchPipelineError("reader_failed"); }
-    return { text, urls: pages.map((page) => page.url), costUSD: SEARCH_COST_USD,
+    return { text, urls: pages.map((page) => page.url), pages, costUSD: SEARCH_COST_USD,
       diagnostic: { ...counts, code: text.trim() ? "read" : "reader_empty" } };
   };
 }
