@@ -201,7 +201,7 @@ export function decideHours(request: { name: string; address: string; date: stri
       ? candidates.windows.find(item => item.id === (value as Record<string, unknown>).hoursID) : undefined;
     // 出典と同じく、非公式ページの候補は捨て、確認できた公式の営業区間は残す。
     if (candidate && !sources.some(source => source.url === candidate.url)) continue;
-    const window = evidenceWindow(value, request.name, sources.map(source => source.url), pages);
+    const window = evidenceWindow(value, request.name, request.address, sources.map(source => source.url), pages);
     if (!window) return unknown("invalid_hours");
     const existing = result.windows.find(value => value.start === window.start && value.end === window.end);
     if (existing) {

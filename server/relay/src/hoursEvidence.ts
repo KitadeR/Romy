@@ -116,7 +116,7 @@ function adjacentOrder(window: WindowCandidate, order: LastOrderCandidate, windo
 }
 
 /**
- * AIへ渡す入力。候補idを抜粋の該当箇所に直接埋め込み、候補の前後の文を別に送らない。
+ * AIへ渡す入力。候補idを抜粋の該当箇所に埋め込み、候補の前後の文は別に送らない。
  * 前後の文を別に送ると抜粋の3〜5倍に入力が膨らみ、JSONの崩れや待ち時間の増加につながった（2026-11-19の確認）。
  */
 export function hoursReaderInput(input: string, pages: Page[]): { input: string; pages: Page[] } {
@@ -128,13 +128,52 @@ export function hoursReaderInput(input: string, pages: Page[]): { input: string;
     }
     return { ...page, snippet: text };
   });
+  // idと原文の時刻だけの短い一覧も添える。埋め込みだけではAIが候補を見落とし、空のidを返した（2026-11-19の評価）。
   return {
-    input: input + "\n\n抜粋中の[p1-w1]などは、コードが原文から抽出した営業時間の候補id。windowsにはidだけを選び、値を書き換えない。",
+    input: input + "\n\n原文の時刻候補（p1は検索結果[1]。抜粋中の[p1-w1]の位置にある。idだけを選び、値を書き換えない）:\n"
+      + JSON.stringify(windows.map(({ id, text }) => ({ id, text }))),
     pages: marked,
   };
 }
 
-export function evidenceWindow(value: unknown, name: string, officialURLs: string[], pages: Page[]): HoursWindow | null {
+// 住所の比較用。全角・空白・ハイフンの種類だけをそろえる。番地の区切りは残す（1-11と11-1を区別する）。
+const addressText = (value: string) => value.normalize("NFKC").toLowerCase().replace(/\s+/gu, "").replace(/[‐‑–—−ー](?=\d)/gu, "-");
+
+/** 住所の照合に使う部分。都道府県と、番地より後ろ（建物名・階）は表記がゆれるので外す。 */
+function addressCore(address: string): string {
+  const value = addressText(address).replace(/^(?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)/u, "");
+  const match = /^\D{4,}\d+(?:-\d+)*/u.exec(value);
+  return match ? match[0] : "";
+}
+
+function containsAddress(text: string, core: string): boolean {
+  const value = addressText(text);
+  for (let index = value.indexOf(core); index >= 0; index = value.indexOf(core, index + 1)) {
+    if (!/^[\d-]/.test(value.slice(index + core.length, index + core.length + 1))) return true;
+  }
+  return false;
+}
+
+/**
+ * 支店の一覧ページで別支店の時間を選ばないよう、その営業時間の区切り（一つ前の営業時間の後ろから、最大400文字前まで）に
+ * 店名・支店名・住所のどれかを求める。公式の一覧は「## 店名 → 説明 → 住所 → 営業時間」の順が多く、
+ * 営業時間の後ろには次の店の見出しが続くため、後ろの文は見ない。タイトルに正式名があればそのページの営業時間とみなす。
+ */
+function namesWindow(name: string, address: string, page: Page, window: WindowCandidate, windows: WindowCandidate[]): boolean {
+  const full = normalize(name);
+  if (normalize(page.title).includes(full)) return true;
+  const previous = windows.filter(value => value.pageIndex === window.pageIndex && value.offset < window.offset).at(-1);
+  const from = Math.max(previous ? previous.offset + previous.text.length : 0, window.offset - 400);
+  const raw = readable(page.snippet).slice(from, window.offset);
+  const block = normalize(raw);
+  const parts = name.normalize("NFKC").trim().split(/\s+/u);
+  // 末尾の支店名（「清水店」「本店」）。公式の一覧はブランド名を省いて支店名だけで書くことが多い。
+  const branch = parts.length > 1 ? normalize(parts[parts.length - 1]) : "";
+  const core = addressCore(address);
+  return block.includes(full) || (branch.length >= 2 && block.includes(branch)) || (core !== "" && containsAddress(raw, core));
+}
+
+export function evidenceWindow(value: unknown, name: string, address: string, officialURLs: string[], pages: Page[]): HoursWindow | null {
   if (!value || typeof value !== "object") return null;
   const { hoursID } = value as Record<string, unknown>;
   if (typeof hoursID !== "string") return null;
@@ -142,8 +181,7 @@ export function evidenceWindow(value: unknown, name: string, officialURLs: strin
   const selected = candidates.windows.find(value => value.id === hoursID && officialURLs.includes(value.url));
   if (!selected) return null;
   const page = pages[selected.pageIndex];
-  // 支店の一覧ページで別支店の時間を選ばないよう、タイトルか営業時間の前後（約100文字）に店名を求める。
-  if (!normalize(page.title).includes(normalize(name)) && !normalize(selected.context).includes(normalize(name))) return null;
+  if (!namesWindow(name, address, page, selected, candidates.windows)) return null;
   const orders = candidates.lastOrders.filter(order => adjacentOrder(selected, order, candidates.windows));
   const minutes = orders.map(order => order.minutes < selected.start && selected.end > 1440 ? order.minutes + 1440 : order.minutes);
   if (minutes.some(value => value < selected.start || value > selected.end)) return null;

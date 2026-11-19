@@ -37,7 +37,8 @@ describe("営業時間の原文照合", () => {
   it("AIへは候補idを抜粋の該当箇所に埋め込み、分数や前後の文の重複を送らない", () => {
     const read = hoursReaderInput("店舗の指定", pages);
     expect(read.pages[0].snippet).toBe("駅前喫茶 中央口店 営業時間:[p1-w1]7:00〜21:00(ラストオーダー:20:30)");
-    expect(read.input).not.toContain("7:00");
+    expect(read.input).toContain('[{"id":"p1-w1","text":"7:00〜21:00"}]');
+    expect(read.input).not.toContain("ラストオーダー");
     expect(read.input).not.toContain('"start"');
     expect(pages[0].snippet).not.toContain("[p1-w1]");
   });
@@ -138,12 +139,30 @@ it("英単語の中の「lo」をLOとして拾わない", () => {
   expect(check("7:00〜21:00 L.O.20:30", [selected]).windows).toEqual([{ start: 420, end: 1260, lastOrder: 1230 }]);
 });
 
-it("支店の一覧では、タイトルか営業時間の前後に店名がある区間だけ採用する", () => {
-  const list = `イノダ 本店 7:00〜18:00 ${"・".repeat(120)} ${request.name}のお知らせ`;
-  const other = [{ url, title: "店舗一覧", snippet: `別の店 8:00〜20:00 ${"・".repeat(120)} ${request.name}` }];
-  expect(decideHours(request, answer, [url], now, other).status).toBe("unknown");
-  expect(decideHours(request, answer, [url], now, [{ url, title: "店舗一覧", snippet: list }]).status).toBe("unknown");
-  expect(decideHours(request, answer, [url], now, [{ url, title: "店舗一覧", snippet: `${request.name} 7:00〜21:00` }]).status).toBe("official");
+describe("支店の一覧ページ", () => {
+  const list = (snippet: string, windows: unknown[] = [selected]) =>
+    decideHours(request, { ...answer, windows }, [url], now, [{ url, title: "直営店 店舗情報", snippet }]);
+  // 実際の公式一覧の形（2026-11-19の評価）：見出し → 説明 → 住所 → 営業時間 → 次の店の見出し。
+  const shops = `## 駅前喫茶 本店 ${"説明".repeat(80)} 住所:京都市中京区本町1-1 営業時間:8:00〜20:00 `
+    + `## 駅前喫茶 中央口店 ${"説明".repeat(80)} 住所:京都府京都市下京区公開町1-1 駅ビル2F 営業時間:7:00〜21:00 `
+    + `## 駅前喫茶 西店 営業時間:9:00〜18:00`;
+  it("その営業時間の区切りに店名・支店名・住所がある区間だけ採用する", () => {
+    expect(list(shops, [{ hoursID: "p1-w2" }]).windows).toEqual([{ start: 420, end: 1260, lastOrder: undefined }]);
+    expect(list(shops, [{ hoursID: "p1-w1" }]).status).toBe("unknown");
+  });
+  it("営業時間の後ろにある次の店の見出しでは採用しない", () => {
+    expect(list(shops, [{ hoursID: "p1-w3" }]).status).toBe("unknown");
+    expect(list(`## 駅前喫茶 本店 8:00〜20:00 ## 駅前喫茶 中央口店`).status).toBe("unknown");
+  });
+  it("支店名だけ、住所だけの書き方でも、その区切りにあれば採用する", () => {
+    expect(list(`駅前喫茶の店舗 ・中央口店 7:00〜21:00`).status).toBe("official");
+    expect(list(`駅前喫茶 住所:京都市下京区公開町1-1 営業時間:7:00〜21:00`).status).toBe("official");
+    expect(list(`駅前喫茶 住所:京都市下京区公開町1-11 営業時間:7:00〜21:00`).status).toBe("unknown");
+    expect(list(`駅前喫茶 住所:京都市下京区公開町11-1 営業時間:7:00〜21:00`).status).toBe("unknown");
+  });
+  it("タイトルに正式名があるページは、そのお店の営業時間とみなす", () => {
+    expect(decideHours(request, answer, [url], now, [{ url, title: request.name, snippet: "営業時間 7:00〜21:00" }]).status).toBe("official");
+  });
 });
 
 it("別の区間のLOは自動的に流用せず、区間内で複数なら推測しない", () => {
