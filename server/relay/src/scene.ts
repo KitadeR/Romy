@@ -231,13 +231,15 @@ const intakeSchema = { type: "object", properties: {
 }, required: ["query", "category", "walkMinutes", "restMinutes", "totalMinutes", "unhandled"] };
 export const hoursInstructions = [
   "指定店舗の対象日の営業時間を公式ページの検索抜粋だけから確かめる。別支店の案内、通常時間だけで祝日・臨時休業を判断しない。",
-  "JSONのname/address/dateは照合できた店舗と対象日。確認できなければ空文字にし、conflicting=true。",
+  "JSONのname/address/dateは照合できた店舗と対象日。確認できなければ空文字にする（確認できないことは矛盾ではない）。",
   "windowsでは、指定店舗・対象日に当てはまる公式ページの原文時刻候補のidだけをhoursIDに入れる。非公式ページの候補を選ばない。",
   "ラストオーダーは同じ営業区間の原文からコードが対応付ける。LOの候補や値を出力しない。",
   "時刻候補には計算済みの番号がある。候補以外の時刻・番号を作らない。分数や引用を書き直さない。適切な候補がなければwindows=[]。",
   "同じ営業区間を複数の出典で確認してもwindowsには1回だけ入れる。昼と夜など別の営業区間は別々に入れる。",
+  "windowsには店の営業時間を入れる。ランチタイム・モーニング・テイクアウトなど、営業時間の中の一部のメニューや時間帯の候補は入れない。",
   "closedは対象日が休業と分かるときだけtrue。closureEvidenceに、対象日の日付（年か曜日つき）または対象日の曜日の定休日を書いた休業案内の原文quoteと公式urlをコピーする。営業ならclosureEvidence=null。",
-  "情報がない場合はwindows=[]、closed=false、closureEvidence=null。出典が食い違う場合はconflicting=true。",
+  "情報がない場合はwindows=[]、closed=false、closureEvidence=null。",
+  "conflictingは、公式ページ同士で対象日の営業時間・休業が食い違うときだけtrue。食べログ・口コミ・地図・観光案内など公式でないページとの違いは矛盾にしない。",
   "sourcesには根拠にした検索結果の公式ページのurl/title/officialを入れる。空席・当日の受付を保証しない。",
 ].join("\n");
 const hoursEvidenceSchema = { type: "object", properties: {

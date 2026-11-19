@@ -98,6 +98,9 @@ describe("pagesAbout", () => {
 describe("isNeverOfficial", () => {
   it("takes official away from booking and travel sites, also on subdomains", () => {
     expect(isNeverOfficial("https://travel.rakuten.co.jp/HOTEL/4979/4979.html")).toBe(true);
+    expect(isNeverOfficial("https://note.com/someone/n/abc")).toBe(true);
+    expect(isNeverOfficial("https://www.navitime.co.jp/poi?spot=1")).toBe(true);
+    expect(isNeverOfficial("https://www.smartcoffee.jp/information")).toBe(false);
     expect(isNeverOfficial("https://yado.knt.co.jp/st/S260006/")).toBe(true);
     expect(isNeverOfficial("https://www.asiayo.com/ja-jp/view/")).toBe(true);
     expect(isNeverOfficial("https://www.hotelkeihan.co.jp/kyoto/facilities/")).toBe(false);

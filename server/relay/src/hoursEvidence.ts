@@ -195,18 +195,25 @@ const WEEKDAYS = "日月火水木金土";
 
 interface DateMention { index: number; end: number; year?: number; month: number; day: number; weekday?: string }
 
-/** 引用中の日付。年付き（2026/11/8・2026年11月8日・2026-11-08）と年なし（11/18・11月18日）を、書かれていれば曜日とともに拾う。 */
+// 「26/10」を26月10日と読まないよう、月日として成り立つものだけを日付とみなす。
+const validDay = (month: number, day: number) => month >= 1 && month <= 12 && day >= 1 && day <= 31;
+
+/** 引用中の日付。年付き（2026/11/8・2026年11月8日・2026-11-08・'26/11/8）と年なし（11/18・11月18日）を、書かれていれば曜日とともに拾う。 */
 function datesIn(text: string): DateMention[] {
   const weekday = "(?:[(（]([日月火水木金土])(?:曜日?)?[)）])?";
   const found: DateMention[] = [];
-  for (const match of text.matchAll(new RegExp(`(?<!\\d)(\\d{4})[/.\\-年](\\d{1,2})[/.\\-月](\\d{1,2})日?(?!\\d)${weekday}`, "g"))) {
+  // 年は4桁か、「'26」のようにアポストロフィつきの2桁（2000年代として読む）。
+  for (const match of text.matchAll(new RegExp(`(?<!\\d)(?:(\\d{4})|['’](\\d{2}))[/.\\-年](\\d{1,2})[/.\\-月](\\d{1,2})日?(?!\\d)${weekday}`, "g"))) {
+    const month = Number(match[3]), day = Number(match[4]);
+    if (!validDay(month, day)) continue;
     found.push({ index: match.index, end: match.index + match[0].length,
-      year: Number(match[1]), month: Number(match[2]), day: Number(match[3]), weekday: match[4] });
+      year: match[1] ? Number(match[1]) : 2000 + Number(match[2]), month, day, weekday: match[5] });
   }
-  for (const match of text.matchAll(new RegExp(`(?<![\\d/.\\-年])(\\d{1,2})[/月](\\d{1,2})日?(?!\\d)${weekday}`, "g"))) {
+  for (const match of text.matchAll(new RegExp(`(?<![\\d/.\\-年'’])(\\d{1,2})[/月](\\d{1,2})日?(?!\\d)${weekday}`, "g"))) {
     const end = match.index + match[0].length;
-    if (found.some(item => match.index < item.end && end > item.index)) continue;
-    found.push({ index: match.index, end, month: Number(match[1]), day: Number(match[2]), weekday: match[3] });
+    const month = Number(match[1]), day = Number(match[2]);
+    if (!validDay(month, day) || found.some(item => match.index < item.end && end > item.index)) continue;
+    found.push({ index: match.index, end, month, day, weekday: match[3] });
   }
   return found.sort((a, b) => a.index - b.index);
 }
