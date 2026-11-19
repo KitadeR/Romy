@@ -41,4 +41,6 @@ node eval/hours/run.mjs score 3 after
 
 ## 確認用の店
 
-`cases.json` の12件は方式の調整に使ったため、改善の確認には別の8件 `holdout.json`（定休日・臨時休業・深夜営業・支店一覧・昼夜の営業とLO・京都以外）を使います。`ROMY_HOURS_EVAL_FILE=holdout` を付けて capture・score を実行します。この8件の結果を見ながら判定を調整せず、調整した場合はそのことを記録します。休業が正解のケースは `reference.closed: true` とし、休業と確認できた場合だけ一致とします。結果は [holdout-2026-11-19.md](holdout-2026-11-19.md) に記録しています。
+`cases.json` の12件は方式の調整に使ったため、改善の確認には別の8件 `holdout.json`（定休日・臨時休業・深夜営業・支店一覧・昼夜の営業とLO・京都以外）を使います。`ROMY_HOURS_EVAL_FILE=holdout` を付けて capture・score を実行します。この8件の結果を見ながら判定を調整せず、調整した場合はそのことを記録します。休業が正解のケースは `reference.closed: true` とし、休業と確認できた場合だけ一致とします。結果は [holdout-2026-11-19.md](holdout-2026-11-19.md) に記録しています。矛盾判定の見直しは [conflict-2026-11-19.md](conflict-2026-11-19.md) にあります。
+
+評価Workerは本番と同じアカウントのWorkers AIの無料枠（1日10,000 Neuron）を使います。使い切ると本番の読み取りもリセット（UTC 0時）まで失敗するため、実行回数を事前に見積もり、想定外の `reader_failed` が出たら止めてください。
