@@ -17,4 +17,10 @@ describe("営業時間の評価", () => {
     expect(assess(reference, { hours: { ...hours, windows: [{ start: 600, end: 1200, lastOrder: 1190 }] } })).toBe("reference_mismatch");
     expect(assess(reference, { hours: { ...hours, sources: [{ url: "https://other.example.jp", official: true }] } })).toBe("source_review_needed");
   });
+  it("休業が正解のケースは、休業の確認だけを一致とする", () => {
+    const closed = { ...reference, closed: true, windows: [] };
+    expect(assess(closed, { hours: { ...hours, closed: true, windows: [] } })).toBe("matches_regular_reference");
+    expect(assess(closed, { hours })).toBe("reference_mismatch");
+    expect(assess(closed, { hours: { status: "unknown" } })).toBe("unconfirmed");
+  });
 });

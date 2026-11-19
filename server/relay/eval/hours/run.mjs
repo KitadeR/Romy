@@ -3,7 +3,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { assess } from "./assessment.mjs";
 
 const base = new URL("./", import.meta.url);
-let cases = JSON.parse(await readFile(new URL("cases.json", base), "utf8"));
+// ROMY_HOURS_EVAL_FILE=holdout で、方式の調整に使わない確認用の店（holdout.json）を評価する。
+const caseFile = process.env.ROMY_HOURS_EVAL_FILE ?? "cases";
+if (!["cases", "holdout"].includes(caseFile)) throw new Error("Unknown case file");
+let cases = JSON.parse(await readFile(new URL(`${caseFile}.json`, base), "utf8"));
 const selected = process.env.ROMY_HOURS_EVAL_CASES?.split(",");
 if (selected) {
   if (selected.some(id => !cases.some(item => item.id === id))) throw new Error("Unknown evaluation case");
