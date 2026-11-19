@@ -117,14 +117,13 @@ describe("isNeverOfficial", () => {
 });
 
 
-it("営業時間だけに原文候補の番号を渡し、実際の抜粋を判定用に保つ", async () => {
+it("営業時間だけ抜粋に候補idを埋め込み、判定には元の抜粋を使う", async () => {
   const page = { url: "https://cafe.example.jp/shop", title: "駅前喫茶", snippet: "駅前喫茶 営業時間7:00〜21:00 LO20:30" };
   const read = fakeReader({ response: "{}" });
   const answer = await searchAndRead("key", read.reader, fakeSearch({ results: [page] }).send)("指示", "対象店舗", {},
     { mention: "駅前喫茶", hoursEvidence: true });
   const user = (read.calls[0].input.messages as { content: string }[])[1].content;
-  expect(user).toContain("p1-w1");
+  expect(user).toContain("駅前喫茶 営業時間[p1-w1]7:00〜21:00 LO20:30");
   expect(user).not.toContain("p1-lo1");
-  expect(user).toContain("7:00〜21:00");
   expect(answer.pages).toEqual([page]);
 });

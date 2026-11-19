@@ -1,4 +1,4 @@
-import { withHoursCandidates } from "./hoursEvidence";
+import { hoursReaderInput } from "./hoursEvidence";
 import type { SearchAI } from "./perplexity";
 import { normalize } from "./verdict";
 
@@ -36,7 +36,8 @@ export function searchAndRead(key: string, reader: Reader, send: typeof fetch = 
     if (pages.length === 0) return { text: "", urls: [], pages: [], costUSD: SEARCH_COST_USD,
       diagnostic: { ...counts, code: found.length ? "place_not_matched" : "search_empty" } };
     let text: string;
-    try { text = await readExcerpts(reader, instructions, options.hoursEvidence ? withHoursCandidates(input, pages) : input, schema, pages); }
+    const read = options.hoursEvidence ? hoursReaderInput(input, pages) : { input, pages };
+    try { text = await readExcerpts(reader, instructions, read.input, schema, read.pages); }
     catch { throw new SearchPipelineError("reader_failed"); }
     return { text, urls: pages.map((page) => page.url), pages, costUSD: SEARCH_COST_USD,
       diagnostic: { ...counts, code: text.trim() ? "read" : "reader_empty" } };

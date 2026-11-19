@@ -1,4 +1,4 @@
-import { withHoursCandidates } from "../src/hoursEvidence";
+import { hoursReaderInput } from "../src/hoursEvidence";
 import { decideHours, hoursInstructions, hoursSchema, parseScene } from "../src/scene";
 import { KINDS } from "../src/kinds";
 import { jsonIn } from "../src/perplexity";
@@ -19,9 +19,10 @@ export default {
         code: body.pages.length ? "place_not_matched" : "search_empty", ...counts,
       } });
       try {
-        const text = await readExcerpts(env.AI, hoursInstructions, withHoursCandidates(JSON.stringify({
+        const read = hoursReaderInput(JSON.stringify({
           name: input.name, address: input.address, date: input.date, timeZone: input.timeZone,
-        }), pages), hoursSchema, pages);
+        }), pages);
+        const text = await readExcerpts(env.AI, hoursInstructions, read.input, hoursSchema, read.pages);
         const answer = jsonIn(text);
         if (!answer) return Response.json({ diagnostic: { code: text.trim() ? "reader_invalid_json" : "reader_empty", ...counts } });
         const hours = decideHours(input, answer, pages.map(page => page.url), new Date(), pages);

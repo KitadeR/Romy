@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decideHours } from "../src/scene";
-import { hoursCandidates, withHoursCandidates } from "../src/hoursEvidence";
+import { hoursCandidates, hoursReaderInput } from "../src/hoursEvidence";
 
 const request = { name: "駅前喫茶 中央口店", address: "京都市下京区公開町1-1", date: "2026-11-18", timeZone: "Asia/Tokyo" };
 const now = new Date("2026-11-18T03:00:00Z");
@@ -34,12 +34,12 @@ describe("営業時間の原文照合", () => {
     expect(decideHours(request, answer, [], now, pages).status).toBe("unknown");
     expect(decideHours(request, { ...answer, sources: [{ url, official: false }] }, [url], now, pages).status).toBe("unknown");
   });
-  it("AIへは原文候補を送り、生成した分数を選択肢にしない", () => {
-    const input = withHoursCandidates("店舗の指定", pages);
-    expect(input).toContain("p1-w1");
-    expect(input).toContain("7:00〜21:00");
-    expect(input).not.toContain('"start"');
-    expect(input).not.toContain('"end"');
+  it("AIへは候補idを抜粋の該当箇所に埋め込み、分数や前後の文の重複を送らない", () => {
+    const read = hoursReaderInput("店舗の指定", pages);
+    expect(read.pages[0].snippet).toBe("駅前喫茶 中央口店 営業時間:[p1-w1]7:00〜21:00(ラストオーダー:20:30)");
+    expect(read.input).not.toContain("7:00");
+    expect(read.input).not.toContain('"start"');
+    expect(pages[0].snippet).not.toContain("[p1-w1]");
   });
 });
 

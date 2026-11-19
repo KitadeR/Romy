@@ -77,13 +77,16 @@ interface ClockCandidate {
 interface WindowCandidate extends ClockCandidate { start: number; end: number }
 interface LastOrderCandidate extends ClockCandidate { minutes: number }
 
+// 候補の位置（offset）はこの表記を基準にする。AIへの埋め込みも同じ表記に対して行う。
+const readable = (snippet: string) => snippet.normalize("NFKC").replace(/\*\*/g, "");
+
 /** 候補は検索抜粋の原文から作る。AIが生成した引用や分数は使わない。 */
 export function hoursCandidates(pages: Page[]): { windows: WindowCandidate[]; lastOrders: LastOrderCandidate[] } {
   const windows: WindowCandidate[] = [], lastOrders: LastOrderCandidate[] = [];
   const token = String.raw`(?:(?:前日|翌日|翌)\s*)?(?:(?:午前|午後|am|pm)\s*)?\d{1,2}(?::\d{2}|時(?:\d{1,2}分|半)?)(?:\s*(?:am|pm))?`;
   const time = `(?:${token}|\\d{1,2}\\s*(?:am|pm))`;
   for (const [pageIndex, page] of pages.entries()) {
-    const text = page.snippet.normalize("NFKC").replace(/\*\*/g, "");
+    const text = readable(page.snippet);
     const ranges = new RegExp(`(?<!\\d)(?<!\\d:)(?:${time}\\s*[〜~～\\-–—−]\\s*${time}|24時間営業)(?![\\d:])`, "giu");
     // 「Polo」「LOCATION」など英単語の一部は拾わない。
     const orders = new RegExp(`(?<![A-Za-z])(?:ラストオーダー|L\\.?O\\.?(?![A-Za-z])|Last\\s*Order|Last\\s*Call)\\s*[:：]?\\s*(${time})(?![\\d:])`, "giu");
@@ -112,12 +115,23 @@ function adjacentOrder(window: WindowCandidate, order: LastOrderCandidate, windo
   return true;
 }
 
-export function withHoursCandidates(input: string, pages: Page[]): string {
-  const candidates = hoursCandidates(pages);
-  const fields = ({ id, url, text, context }: ClockCandidate) => ({ id, url, text, context });
-  return input + "\n\n原文の時刻候補（idだけを選ぶ。値を書き換えない）:\n" + JSON.stringify({
-    windows: candidates.windows.map(fields),
+/**
+ * AIへ渡す入力。候補idを抜粋の該当箇所に直接埋め込み、候補の前後の文を別に送らない。
+ * 前後の文を別に送ると抜粋の3〜5倍に入力が膨らみ、JSONの崩れや待ち時間の増加につながった（2026-11-19の確認）。
+ */
+export function hoursReaderInput(input: string, pages: Page[]): { input: string; pages: Page[] } {
+  const { windows } = hoursCandidates(pages);
+  const marked = pages.map((page, pageIndex) => {
+    let text = readable(page.snippet);
+    for (const window of windows.filter(value => value.pageIndex === pageIndex).sort((a, b) => b.offset - a.offset)) {
+      text = text.slice(0, window.offset) + `[${window.id}]` + text.slice(window.offset);
+    }
+    return { ...page, snippet: text };
   });
+  return {
+    input: input + "\n\n抜粋中の[p1-w1]などは、コードが原文から抽出した営業時間の候補id。windowsにはidだけを選び、値を書き換えない。",
+    pages: marked,
+  };
 }
 
 export function evidenceWindow(value: unknown, name: string, officialURLs: string[], pages: Page[]): HoursWindow | null {
