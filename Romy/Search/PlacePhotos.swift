@@ -35,11 +35,14 @@ enum PlacePhotos {
     }
 }
 
-/// The Look Around picture of a place, or nothing at all where Apple has none (the card then looks as before).
+/// The Look Around picture of a place. The frame keeps the same height while loading and where Apple has no
+/// imagery (2026-11-19, るわさん「写真ない場合でも、同じ下の位置に合わせるべき」), so the lines under it never move.
+/// The caller owns `picture`, so a card can show the rest of itself as loading too.
 struct LookAroundPicture: View {
     let place: ProposalPlace
+    var kind: SceneStep.Kind = .rest
     var height: CGFloat = 112
-    @State private var picture = LookAroundPictureModel()
+    let picture: LookAroundPictureModel
 
     var body: some View {
         Group {
@@ -66,12 +69,44 @@ struct LookAroundPicture: View {
                     }
                     .accessibilityLabel("\(place.name)の前の通りの写真（Look Around）")
             case .unavailable:
-                // A completed lookup without imagery must not leave an endless placeholder.
-                Color.clear.frame(height: 0)
+                // A completed lookup without imagery says so in the same frame, not with an endless placeholder.
+                NoPicture(kind: kind, text: "通りの写真はありません", height: height)
             }
         }
         .task(id: LookAroundPictureModel.key(for: place)) {
             await picture.load(place, size: CGSize(width: 600, height: height * 2))
+        }
+    }
+}
+
+/// The frame a picture would fill, with the kind of stop and a short line, for places without one.
+struct NoPicture: View {
+    let kind: SceneStep.Kind
+    let text: String
+    var height: CGFloat = 112
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: kind.pictureSymbol).font(.system(size: 24, weight: .regular))
+            Text(text).font(Theme.jp(12))
+        }
+        .foregroundStyle(Theme.actionSecondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(Theme.fill, in: .rect(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension SceneStep.Kind {
+    /// The symbol a missing picture shows: a cup for a rest, a fork and knife for a meal.
+    var pictureSymbol: String {
+        switch self {
+        case .rest: "cup.and.saucer"
+        case .eat: "fork.knife"
+        case .dropLuggage, .lockerDrop, .lockerPickUp: "suitcase.rolling"
+        case .checkIn: "bed.double"
+        case .next: "mappin.and.ellipse"
         }
     }
 }

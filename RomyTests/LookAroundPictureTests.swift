@@ -67,6 +67,18 @@ struct LookAroundPictureTests {
         #expect(isLoading(model.phase(for: first)))
     }
 
+    @Test func aPictureThatComesBackAtOnceStillLoadsForTheMinimumTime() async {
+        let model = LookAroundPictureModel(minimumLoading: .milliseconds(150), loadImage: { _, _ in UIImage() })
+        let clock = ContinuousClock()
+        let started = clock.now
+        await model.load(first, size: size)
+        #expect(clock.now - started >= .milliseconds(150))
+        guard case .available = model.phase(for: first) else {
+            Issue.record("最短時間のあとに画像が表示されません")
+            return
+        }
+    }
+
     private func isLoading(_ phase: LookAroundPictureModel.Phase) -> Bool {
         if case .loading = phase { return true }
         return false
