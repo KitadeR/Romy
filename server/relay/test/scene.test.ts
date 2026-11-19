@@ -11,7 +11,7 @@ const shop = { operation: "hours" as const, session, name: "神戸カフェ", ad
 const quote = "神戸カフェ 営業時間10:00〜20:00（LO19:00）。2026年11月17日は休業。";
 const pages = [{ url, title: shop.name, snippet: quote }];
 const official = { ...shop, conflicting: false, closed: false,
-  windows: [{ hoursID: "p1-w1", lastOrderID: "p1-lo1" }],
+  windows: [{ hoursID: "p1-w1" }],
   sources: [{ url, title: "神戸店", official: true }] };
 function makeDeps(text = JSON.stringify(official)) {
   const store = new MemoryStore();
@@ -49,7 +49,7 @@ describe("公式営業時間の判定", () => {
   it("同じ支店の公式ページと、翌日に続く営業区間・休業日を採用する", () => {
     expect(decideHours(shop, official, [url], now, pages).status).toBe("official");
     const overnight = "神戸カフェ 18:00〜翌2:00（LO翌1:00）";
-    expect(decideHours(shop, { ...official, windows: [{ hoursID: "p1-w1", lastOrderID: "p1-lo1" }] },
+    expect(decideHours(shop, { ...official, windows: [{ hoursID: "p1-w1" }] },
       [url], now, [{ ...pages[0], snippet: overnight }]).windows[0].end).toBe(1560);
     expect(decideHours(shop, { ...official, closed: true, windows: [], closureEvidence: { url, quote } }, [url], now, pages).closed).toBe(true);
   });
@@ -165,7 +165,7 @@ it("原文照合前のキャッシュを再利用せず、原文や抜粋をア�
   const reply = await runScene(shop, "deviceAAAA", d.deps);
   expect(d.searches()).toBe(1);
   expect(reply.hours?.windows).toEqual([{ start: 600, end: 1200, lastOrder: 1140 }]);
-  expect(JSON.stringify(reply)).not.toContain("hoursText");
+  expect(JSON.stringify(reply)).not.toContain("p1-w1");
   expect(JSON.stringify(reply)).not.toContain("quote");
   expect(JSON.stringify(reply)).not.toContain("snippet");
 });

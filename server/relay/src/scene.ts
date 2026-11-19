@@ -73,7 +73,7 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
   const started = Date.now();
   const reply = await runSceneRequest(request, device, deps);
   if (request.operation === "hours") {
-    // Allowlisted codes and counts only. Never log request data, URLs, IDs, or model output.
+    // 決まった判定コードと件数だけを残す。入力・URL・ID・AIの応答はログに出さない。
     console.log(JSON.stringify({ event: "hours_result", code: reply.diagnostic?.code ?? "internal_error",
       cached: reply.diagnostic?.cached ?? false, foundPages: reply.diagnostic?.foundPages,
       matchedPages: reply.diagnostic?.matchedPages, ms: Date.now() - started }));
@@ -185,7 +185,7 @@ export function decideHours(request: { name: string; address: string; date: stri
   const result: Hours = { status: "unknown", date: request.date, timeZone: request.timeZone,
     windows: [], closed: false, sources, checkedAt: now.toISOString() };
   const unknown = (diagnostic: HoursDecisionCode): Hours => ({ ...result, windows: [], diagnostic });
-  // Keep the existing acceptance rules. Diagnostics identify the first rejected condition.
+  // 採用の基準は従来どおり。診断コードは最初に満たさなかった条件を示す。
   if (normalize(String(body.name ?? "")) !== normalize(request.name)) return unknown("name_mismatch");
   if (normalize(String(body.address ?? "")) !== normalize(request.address)) return unknown("address_mismatch");
   if (body.date !== request.date) return unknown("date_mismatch");
@@ -199,7 +199,7 @@ export function decideHours(request: { name: string; address: string; date: stri
   for (const value of body.windows) {
     const candidate = value && typeof value === "object"
       ? candidates.windows.find(item => item.id === (value as Record<string, unknown>).hoursID) : undefined;
-    // As with sources, discard known non-official evidence without discarding verified official intervals.
+    // 出典と同じく、非公式ページの候補は捨て、確認できた公式の営業区間は残す。
     if (candidate && !sources.some(source => source.url === candidate.url)) continue;
     const window = evidenceWindow(value, request.name, sources.map(source => source.url), pages);
     if (!window) return unknown("invalid_hours");
@@ -236,7 +236,7 @@ export const hoursInstructions = [
   "ラストオーダーは同じ営業区間の原文からコードが対応付ける。LOの候補や値を出力しない。",
   "時刻候補には計算済みの番号がある。候補以外の時刻・番号を作らない。分数や引用を書き直さない。適切な候補がなければwindows=[]。",
   "同じ営業区間を複数の出典で確認してもwindowsには1回だけ入れる。昼と夜など別の営業区間は別々に入れる。",
-  "closedは対象日が休業と分かるときだけtrue。closureEvidenceに対象日を年から含む休業案内の原文quoteと公式urlをコピーする。営業ならclosureEvidence=null。",
+  "closedは対象日が休業と分かるときだけtrue。closureEvidenceに、対象日の日付（年か曜日つき）または対象日の曜日の定休日を書いた休業案内の原文quoteと公式urlをコピーする。営業ならclosureEvidence=null。",
   "情報がない場合はwindows=[]、closed=false、closureEvidence=null。出典が食い違う場合はconflicting=true。",
   "sourcesには根拠にした検索結果の公式ページのurl/title/officialを入れる。空席・当日の受付を保証しない。",
 ].join("\n");
