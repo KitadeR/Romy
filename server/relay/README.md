@@ -29,6 +29,31 @@ npx wrangler dev -c eval/wrangler.toml --port 8797   # 別のターミナルで
 node eval/score.mjs 3
 ```
 
+営業時間の評価は [eval/hours/README.md](eval/hours/README.md) を参照してください。公開カフェ12件の検索結果を保存し、本番と同じ読み取り・判定で比較できます。初回の結果と調査点は [2026-11-18の記録](eval/hours/baseline-2026-11-18.md) にあります。
+
+## 営業時間の診断
+
+`/v1/scene` の既存レスポンスに、任意の `diagnostic`（`code`、キャッシュ利用の有無、検索／読取対象の件数）を追加しています。古いアプリは追加項目を無視できます。判定コードは営業時間キャッシュにも保持し、古い未確認キャッシュの理由は `cached_unknown` とします。DB移行は不要です。
+
+CloudflareのWorkerログでは `event: "hours_result"` を確認します。理由は最初に拒否された条件であり、唯一の原因とは限りません。
+
+| コード | 意味 |
+| --- | --- |
+| `device_limit` / `budget_limit` / `session_limit` | 端末日次／全体費用／セッションの上限で未実行 |
+| `api_unconfigured` | 中継に検索APIキーが未設定 |
+| `search_failed` / `reader_failed` | 検索／AI読み取りで失敗 |
+| `search_empty` / `place_not_matched` | 検索結果なし／店名フィルター通過なし |
+| `reader_empty` / `reader_invalid_json` | AIの回答なし／JSONとして読めない |
+| `name_mismatch` / `address_mismatch` / `date_mismatch` | 店名／住所／対象日の照合失敗 |
+| `conflicting` / `no_official_source` | 情報の矛盾／採用できる公式出典なし |
+| `invalid_hours` / `no_hours` | 不正な時刻／営業区間の根拠不足 |
+| `confirmed` | 既存の公式確認条件を通過。正確性は別途評価する |
+| `internal_error` / `cached_unknown` | その他の処理失敗／旧キャッシュで理由不明 |
+
+アプリ側はXcodeのログでカテゴリ `Hours` を確認できます。サーバーのコードに加え、`client_session_limit`（アプリの3回上限）、`missing_address`、`missing_config`、`transport_failed`、`http_rejected`（HTTP状態も記録）、`response_invalid` を記録します。診断に対応していないサーバーの応答は `unknown` です。
+
+本番ログは固定の理由・件数・時間だけです。店名、住所、対象日、URL、端末ID、セッションID、認証情報、AI応答本文は出しません。アプリも固定コードだけをdebugログに出し、画面には表示しません。公開環境で新しい診断を取得するにはWorkerの反映と新しいアプリのビルドが必要です。
+
 ## Romy Now
 
 `POST /v1/scene` に `session`（UUID）と次のいずれかを渡します。既存の `X-Romy-Device` / `X-Romy-Token` による認証・上限を共用します。

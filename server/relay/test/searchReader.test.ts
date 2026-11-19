@@ -41,6 +41,7 @@ describe("searchAndRead", () => {
       text: "{\"front_desk\":\"yes\"}",
       urls: ["https://hotel-kyoto.example.jp/service", "https://travel.rakuten.co.jp/HOTEL/1/1.html"],
       costUSD: SEARCH_COST_USD,
+      diagnostic: { code: "read", foundPages: 2, matchedPages: 2 },
     });
   });
 
@@ -49,11 +50,20 @@ describe("searchAndRead", () => {
     const answer = await searchAndRead("key", read.reader, fakeSearch({ results: [] }).send)("指示", "入力", {});
     expect(read.calls).toHaveLength(0);
     expect(answer.text).toBe("");
+    expect(answer.diagnostic).toEqual({ code: "search_empty", foundPages: 0, matchedPages: 0 });
   });
 
   it("fails like the Agent API did when the search is refused, so the check stays ？", async () => {
     await expect(searchAndRead("key", fakeReader({}).reader, fakeSearch({}, 403).send)("指示", "入力", {}))
       .rejects.toThrow("perplexity 403");
+  });
+
+  it("distinguishes reader failures from search failures without leaking provider errors", async () => {
+    const reader: Reader = { run: async () => { throw new Error("secret response body"); } };
+    await expect(searchAndRead("key", reader, fakeSearch(pages).send)("指示", "入力", {}))
+      .rejects.toMatchObject({ code: "reader_failed", message: "reader_failed" });
+    const answer = await searchAndRead("key", fakeReader({}).reader, fakeSearch(pages).send)("指示", "入力", {});
+    expect(answer.diagnostic?.code).toBe("reader_empty");
   });
 
   it("reads both reply shapes of Workers AI", () => {
@@ -80,6 +90,7 @@ describe("pagesAbout", () => {
     const answer = await searchAndRead("key", read.reader, fakeSearch(pages).send)("指示", "入力", {}, { mention: "別のホテル" });
     expect(read.calls).toHaveLength(0);
     expect(answer.urls).toEqual([]);
+    expect(answer.diagnostic).toEqual({ code: "place_not_matched", foundPages: 2, matchedPages: 0 });
   });
 });
 

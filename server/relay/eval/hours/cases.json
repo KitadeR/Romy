@@ -1,0 +1,298 @@
+[
+  {
+    "id": "tsujiri-isetan",
+    "request": {
+      "operation": "hours",
+      "name": "茶寮都路里 京都伊勢丹店",
+      "address": "京都市下京区 ジェイアール京都伊勢丹6階",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.giontsujiri.co.jp/store/kyoto-isetan/"
+      ],
+      "windows": [
+        {
+          "start": 600,
+          "end": 1200,
+          "lastOrder": 1170
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "不定休。対象日の休業有無まではこの店舗ページでは確定できない。"
+    }
+  },
+  {
+    "id": "inoda-main",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ 本店",
+      "address": "京都市中京区堺町通三条下る道祐町140番地",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/honten/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1080,
+          "lastOrder": 1050
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "年中無休の通常案内。臨時変更は別途確認。"
+    }
+  },
+  {
+    "id": "inoda-sanjo",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ 三条店",
+      "address": "京都市中京区三条通堺町東入る桝屋町69番地",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 600,
+          "end": 1140
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "11月の特定日だけ9時開店の案内あり。11月18日は列挙された特定日に含まれない。"
+    }
+  },
+  {
+    "id": "inoda-shijo",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ 四条支店B2",
+      "address": "京都市下京区四条通東洞院東入る立売西町66番地",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 600,
+          "end": 1140
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": ""
+    }
+  },
+  {
+    "id": "inoda-salon",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ コーヒーサロン支店",
+      "address": "京都市下京区四条通高倉西入る立売西町79番地 大丸京都店1階",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 600,
+          "end": 1200
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": ""
+    }
+  },
+  {
+    "id": "inoda-porta",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ ポルタ支店",
+      "address": "京都市下京区東塩小路町858-1 京都ポルタ内",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/",
+        "https://www.kyoto-station-building.co.jp/restaurant_cafe/071/"
+      ],
+      "windows": [
+        {
+          "start": 480,
+          "end": 1260
+        }
+      ],
+      "expectation": "unknown",
+      "note": "店舗運営元は8〜21時だが京都駅ビルの案内は8:30〜20時（金土21時）。この評価では公式同士の矛盾が未解決なのでunknownを正解とする。"
+    }
+  },
+  {
+    "id": "inoda-hachijo",
+    "request": {
+      "operation": "hours",
+      "name": "イノダコーヒ 八条口支店",
+      "address": "京都市下京区東塩小路高倉町8-3 JR東海京都駅構内1階ASTYロード内",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.inoda-coffee.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 480,
+          "end": 1200
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": ""
+    }
+  },
+  {
+    "id": "ogawa-station",
+    "request": {
+      "operation": "hours",
+      "name": "OGAWA COFFEE 京都駅店",
+      "address": "京都市下京区東塩小路町 地下鉄京都駅コトチカ京都内",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.oc-ogawa.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1260,
+          "lastOrder": 1230
+        }
+      ],
+      "expectation": "unknown",
+      "note": "公式ページの日本語7時と英語7:30で開店時刻が異なる。未解決としてunknownを正解とする。"
+    }
+  },
+  {
+    "id": "ogawa-central",
+    "request": {
+      "operation": "hours",
+      "name": "OGAWA COFFEE 京都駅中央口店",
+      "address": "京都市下京区塩小路通室町東入東塩小路町579-16 ホテル法華クラブ京都1F",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.oc-ogawa.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1260,
+          "lastOrder": 1230
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "施設による変更あり。京都駅店との取り違えを確認。"
+    }
+  },
+  {
+    "id": "ogawa-main",
+    "request": {
+      "operation": "hours",
+      "name": "小川珈琲 本店",
+      "address": "京都市右京区西京極北庄境町75",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.oc-ogawa.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1140,
+          "lastOrder": 1110
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "年中無休の通常案内。"
+    }
+  },
+  {
+    "id": "ogawa-kiyomizu",
+    "request": {
+      "operation": "hours",
+      "name": "小川珈琲 清水店",
+      "address": "京都府京都市東山区清水4-171 MUJI BASE KYOTO kiyomizu 1F",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.oc-ogawa.co.jp/shop/"
+      ],
+      "windows": [
+        {
+          "start": 480,
+          "end": 1200,
+          "lastOrder": 1170
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "年中無休の通常案内。"
+    }
+  },
+  {
+    "id": "ogawa-nishiki",
+    "request": {
+      "operation": "hours",
+      "name": "小川珈琲 堺町錦店",
+      "address": "京都府京都市中京区堺町通錦小路上る菊屋町519-1",
+      "date": "2026-11-18",
+      "timeZone": "Asia/Tokyo"
+    },
+    "reference": {
+      "reviewedAt": "2026-11-18",
+      "sources": [
+        "https://www.oc-ogawa.co.jp/shop/",
+        "https://www.oc-ogawa.co.jp/nishiki/"
+      ],
+      "windows": [
+        {
+          "start": 420,
+          "end": 1200
+        }
+      ],
+      "expectation": "regular_reference",
+      "note": "フードのLO19時とスイーツ・ドリンクのLO19:30は別。単一のLOに断定しない。"
+    }
+  }
+]

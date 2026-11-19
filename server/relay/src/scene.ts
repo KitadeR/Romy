@@ -1,3 +1,4 @@
+import { SearchPipelineError } from "./searchReader";
 import { isNeverOfficial } from "./official";
 import { japanDay, type Deps } from "./check";
 import { jsonIn, type SearchAI } from "./perplexity";
@@ -20,6 +21,7 @@ export interface Hours {
   closed: boolean;
   sources: Source[];
   checkedAt: string;
+  diagnostic?: HoursDecisionCode;
 }
 type SceneRequest = { session: string } & (
   { operation: "interpret"; text: string } |
@@ -29,10 +31,22 @@ export interface SceneDeps extends Omit<Deps, "takeSession"> {
   interpret: SearchAI;
   takeSession: (session: string, operation: "interpret" | "hours") => Promise<boolean>;
 }
+export type HoursDecisionCode = "confirmed" | "name_mismatch" | "address_mismatch" | "date_mismatch"
+  | "conflicting" | "no_official_source" | "invalid_hours" | "no_hours";
+export type HoursDiagnosticCode = HoursDecisionCode | "device_limit" | "budget_limit" | "session_limit"
+  | "search_empty" | "place_not_matched" | "reader_empty" | "reader_invalid_json"
+  | "search_failed" | "reader_failed" | "internal_error" | "cached_unknown" | "api_unconfigured";
+export interface HoursDiagnostic {
+  code: HoursDiagnosticCode;
+  cached?: boolean;
+  foundPages?: number;
+  matchedPages?: number;
+}
 export interface SceneReply {
   preferences?: Preferences;
   hours?: Hours;
   reason?: "limit" | "error";
+  diagnostic?: HoursDiagnostic;
 }
 
 export function parseScene(value: unknown): SceneRequest | null {
@@ -54,6 +68,20 @@ export function parseScene(value: unknown): SceneRequest | null {
 }
 
 export async function runScene(request: SceneRequest, device: string, deps: SceneDeps): Promise<SceneReply> {
+  const started = Date.now();
+  const reply = await runSceneRequest(request, device, deps);
+  if (request.operation === "hours") {
+    // Allowlisted codes and counts only. Never log request data, URLs, IDs, or model output.
+    console.log(JSON.stringify({ event: "hours_result", code: reply.diagnostic?.code ?? "internal_error",
+      cached: reply.diagnostic?.cached ?? false, foundPages: reply.diagnostic?.foundPages,
+      matchedPages: reply.diagnostic?.matchedPages, ms: Date.now() - started }));
+  }
+  return reply;
+}
+
+async function runSceneRequest(request: SceneRequest, device: string, deps: SceneDeps): Promise<SceneReply> {
+  const fail = (reason: "limit" | "error", code: HoursDiagnosticCode): SceneReply =>
+    request.operation === "hours" ? { reason, diagnostic: { code } } : { reason };
   const now = deps.now();
   const day = japanDay(now);
   // 営業時間は当日・店舗・タイムゾーン単位。希望文の解釈は共有保存しない。
@@ -61,19 +89,21 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
     ? "hours:" + normalize(request.name + "|" + request.address) + "|" + request.date + "|" + request.timeZone : null;
   if (key) {
     const cached = await deps.store.getCheck(key, now.getTime());
-    if (cached) return { hours: (cached as unknown as { hours: Hours }).hours };
+    if (cached?.hours) return { hours: cached.hours, diagnostic: {
+      code: cached.hours.diagnostic ?? (cached.hours.status === "official" ? "confirmed" : "cached_unknown"), cached: true,
+    } };
   }
   const search = request.operation === "hours";
-  if (search && !await deps.store.takeSearch(device, day, deps.limits.deviceDaily)) return { reason: "limit" };
+  if (search && !await deps.store.takeSearch(device, day, deps.limits.deviceDaily)) return fail("limit", "device_limit");
   if (!await deps.store.reserve(day, deps.limits.reserveUSD, deps.limits.globalUSD)) {
     if (search) await deps.store.giveBackSearch(device, day);
-    return { reason: "limit" };
+    return fail("limit", "budget_limit");
   }
   let spent = 0;
   try {
     if (!await deps.takeSession(request.session, request.operation)) {
       if (search) await deps.store.giveBackSearch(device, day);
-      return { reason: "limit" };
+      return fail("limit", "session_limit");
     }
     spent = deps.limits.reserveUSD;
     const answer = request.operation === "interpret"
@@ -83,7 +113,15 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
         }), hoursSchema, { query: `${request.name} ${request.address} 営業時間`, mention: request.name });
     spent = answer.costUSD ?? deps.limits.reserveUSD;
     const json = jsonIn(answer.text);
-    if (!json) return { reason: "error" };
+    const counts = answer.diagnostic ? {
+      foundPages: answer.diagnostic.foundPages, matchedPages: answer.diagnostic.matchedPages,
+    } : {};
+    if (!json) {
+      const code = answer.diagnostic?.code;
+      const reply = fail("error", code && code !== "read" ? code : "reader_invalid_json");
+      if (reply.diagnostic) Object.assign(reply.diagnostic, counts);
+      return reply;
+    }
     if (request.operation === "interpret") {
       const preferences = parsePreferences(json);
       return preferences ? { preferences } : { reason: "error" };
@@ -96,13 +134,13 @@ export async function runScene(request: SceneRequest, device: string, deps: Scen
         checkedAt: hours.checkedAt, hours,
       }, now.getTime() + (hours.status === "official" ? 3_600_000 : 300_000));
     }
-    return { hours };
+    return { hours, diagnostic: { code: hours.diagnostic ?? "internal_error", ...counts, cached: false } };
   } catch (error) {
     // HTTP状態などの失敗種別だけを残す。希望文・店名・住所・応答本文はログに出さない。
     const kind = error instanceof Error && /^perplexity \d{3}$/.test(error.message)
-      ? error.message : error instanceof Error ? error.name : "unknown";
+      ? error.message : error instanceof Error && ["Error", "TypeError", "TimeoutError", "AbortError"].includes(error.name) ? error.name : "unknown";
     console.log(JSON.stringify({ event: "scene_failed", operation: request.operation, error: kind }));
-    return { reason: "error" };
+    return fail("error", error instanceof SearchPipelineError ? error.code : "internal_error");
   } finally {
     await deps.store.settle(day, deps.limits.reserveUSD, spent);
     await deps.store.sweep(japanDay(new Date(now.getTime() - 7 * 86_400_000)), now.getTime());
@@ -144,23 +182,26 @@ export function decideHours(request: { name: string; address: string; date: stri
   }).slice(0, 3) : [];
   const result: Hours = { status: "unknown", date: request.date, timeZone: request.timeZone,
     windows: [], closed: false, sources, checkedAt: now.toISOString() };
-  // 同じ支店・対象日の公式情報と照合できた場合だけ、時刻の判定に使う。
-  if (normalize(String(body.name ?? "")) !== normalize(request.name)
-      || normalize(String(body.address ?? "")) !== normalize(request.address)
-      || body.date !== request.date || body.conflicting !== false || !sources.length
-      || typeof body.closed !== "boolean" || !Array.isArray(body.windows)) return result;
+  const unknown = (diagnostic: HoursDecisionCode): Hours => ({ ...result, windows: [], diagnostic });
+  // Keep the existing acceptance rules. Diagnostics identify the first rejected condition.
+  if (normalize(String(body.name ?? "")) !== normalize(request.name)) return unknown("name_mismatch");
+  if (normalize(String(body.address ?? "")) !== normalize(request.address)) return unknown("address_mismatch");
+  if (body.date !== request.date) return unknown("date_mismatch");
+  if (body.conflicting !== false) return unknown("conflicting");
+  if (!sources.length) return unknown("no_official_source");
+  if (typeof body.closed !== "boolean" || !Array.isArray(body.windows)) return unknown("invalid_hours");
   for (const value of body.windows) {
-    if (!value || typeof value !== "object") return result;
+    if (!value || typeof value !== "object") return unknown("invalid_hours");
     const { start, end, lastOrder } = value as Record<string, unknown>;
     if (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 0
-        || Number(end) > 2880 || Number(start) >= Number(end)) return result;
+        || Number(end) > 2880 || Number(start) >= Number(end)) return unknown("invalid_hours");
     if (lastOrder != null && (!Number.isInteger(lastOrder) || Number(lastOrder) < Number(start)
-        || Number(lastOrder) > Number(end))) return result;
+        || Number(lastOrder) > Number(end))) return unknown("invalid_hours");
     result.windows.push({ start: Number(start), end: Number(end),
       lastOrder: lastOrder == null ? undefined : Number(lastOrder) });
   }
-  if (body.closed ? result.windows.length !== 0 : result.windows.length === 0) return { ...result, windows: [] };
-  return { ...result, status: "official", closed: body.closed };
+  if (body.closed ? result.windows.length !== 0 : result.windows.length === 0) return unknown(body.closed ? "invalid_hours" : "no_hours");
+  return { ...result, status: "official", closed: body.closed, diagnostic: "confirmed" };
 }
 
 const intakeInstructions = [
@@ -176,7 +217,7 @@ const intakeSchema = { type: "object", properties: {
   walkMinutes: nullableNumber, restMinutes: nullableNumber, totalMinutes: nullableNumber,
   unhandled: { type: "array", items: { type: "string" } },
 }, required: ["query", "category", "walkMinutes", "restMinutes", "totalMinutes", "unhandled"] };
-const hoursInstructions = [
+export const hoursInstructions = [
   "指定店舗の対象日の営業時間を公式ページから確かめる。別支店の案内、通常時間だけで祝日・臨時休業を判断しない。",
   "JSONのname/address/dateは照合できた店舗と対象日。確認できなければ空文字にし、conflicting=true。",
   "windowsは対象日の0時からの営業区間（分）。翌日2時は1560。前日から続く営業も対象日の0時をstart=0とする。",
@@ -184,7 +225,7 @@ const hoursInstructions = [
   "情報がない場合はwindows=[]、closed=false。出典が食い違う場合はconflicting=true。",
   "sourcesには実際に検索・閲覧した公式ページのurl/title/officialを入れる。空席・当日の受付を保証しない。",
 ].join("\n");
-const hoursSchema = { type: "object", properties: {
+export const hoursSchema = { type: "object", properties: {
   name: { type: "string" }, address: { type: "string" }, date: { type: "string" },
   closed: { type: "boolean" }, conflicting: { type: "boolean" },
   windows: { type: "array", items: { type: "object", properties: {

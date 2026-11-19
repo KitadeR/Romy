@@ -27,12 +27,25 @@ export interface Page {
 /// (Notion 04「2026-10-29｜各社のデータの扱い」①).
 export function searchAndRead(key: string, reader: Reader, send: typeof fetch = fetch): SearchAI {
   return async (instructions, input, schema, options = {}) => {
-    const found = await search(send, key, options.query ?? input);
+    let found: Page[];
+    try { found = await search(send, key, options.query ?? input); }
+    catch (error) { throw new SearchPipelineError("search_failed", error); }
     const pages = options.mention ? pagesAbout(found, options.mention) : found;
-    if (pages.length === 0) return { text: "", urls: [], costUSD: SEARCH_COST_USD };
-    const text = await readExcerpts(reader, instructions, input, schema, pages);
-    return { text, urls: pages.map((page) => page.url), costUSD: SEARCH_COST_USD };
+    const counts = { foundPages: found.length, matchedPages: pages.length };
+    if (pages.length === 0) return { text: "", urls: [], costUSD: SEARCH_COST_USD,
+      diagnostic: { ...counts, code: found.length ? "place_not_matched" : "search_empty" } };
+    let text: string;
+    try { text = await readExcerpts(reader, instructions, input, schema, pages); }
+    catch { throw new SearchPipelineError("reader_failed"); }
+    return { text, urls: pages.map((page) => page.url), costUSD: SEARCH_COST_USD,
+      diagnostic: { ...counts, code: text.trim() ? "read" : "reader_empty" } };
   };
+}
+
+export class SearchPipelineError extends Error {
+  constructor(readonly code: "search_failed" | "reader_failed", cause?: unknown) {
+    super(cause instanceof Error && /^perplexity \d{3}$/.test(cause.message) ? cause.message : code);
+  }
 }
 
 /// Only the pages whose title or excerpt names the place. A sister hotel's FAQ or a chain-wide page otherwise

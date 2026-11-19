@@ -3,6 +3,7 @@ export interface SearchAnswer {
   text: string;
   urls: string[];
   costUSD?: number;
+  diagnostic?: { code: "read" | "search_empty" | "place_not_matched" | "reader_empty"; foundPages: number; matchedPages: number };
 }
 
 /// For the Search API + Workers AI reader: `query` is what to search for, and `mention` is the place's name,
